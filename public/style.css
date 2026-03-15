@@ -146,6 +146,7 @@ body { background-color: var(--bg-base); color: var(--text-main); overflow-x: hi
 .dev-hero { background: linear-gradient(180deg, #1e3264 0%, var(--bg-base) 100%); padding: 60px 16px 30px; text-align: center; }
 .dev-hero h1 { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
 .dev-hero p { color: var(--text-sub); font-size: 14px; }
+.dev-avatar { width: 90px; height: 90px; border-radius: 50%; background: linear-gradient(135deg, var(--spotify-green), #1a8a3c); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 800; color: black; margin: 0 auto 16px; box-shadow: 0 8px 24px rgba(30,215,96,0.35); }
 .dev-badge { background: rgba(30,215,96,0.15); padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; display: inline-block; margin-bottom: 20px; color: var(--spotify-green); border: 1px solid rgba(30,215,96,0.3); }
 .dev-card { background: #181818; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.05); }
 .dev-card-title { font-size: 16px; font-weight: 700; color: white; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
