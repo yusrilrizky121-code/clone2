@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from ytmusicapi import YTMusic
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
-import time
 
 app = FastAPI()
 
@@ -15,18 +14,15 @@ app.add_middleware(
 
 ytmusic = YTMusic()
 
-home_cache = {}
-CACHE_TTL = 1800
-
-def format_results(search_results):
+def format_results(results):
     cleaned = []
-    for item in search_results:
+    for item in results:
         if 'videoId' in item:
             cleaned.append({
                 "videoId": item['videoId'],
                 "title": item.get('title', 'Unknown Title'),
-                "artist": item.get('artists', [{'name': 'Unknown Artist'}])[0]['name'] if 'artists' in item else 'Unknown Artist',
-                "thumbnail": item['thumbnails'][-1]['url'] if 'thumbnails' in item else ''
+                "artist": item['artists'][0]['name'] if item.get('artists') else 'Unknown Artist',
+                "thumbnail": item['thumbnails'][-1]['url'] if item.get('thumbnails') else ''
             })
     return cleaned
 
