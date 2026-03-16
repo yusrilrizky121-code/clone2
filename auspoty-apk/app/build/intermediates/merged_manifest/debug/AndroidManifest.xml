@@ -35,6 +35,8 @@
             android:name="com.auspoty.app.MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
+            android:hardwareAccelerated="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.WebChromeClient;
@@ -22,6 +23,8 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private SwipeRefreshLayout swipeRefresh;
     private ProgressBar progressBar;
+    private Handler keepAliveHandler;
+    private Runnable keepAliveRunnable;
 
     private static final String APP_URL = "file:///android_asset/index.html";
     private static final String API_HOST = "clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app";
@@ -97,6 +100,18 @@ public class MainActivity extends AppCompatActivity {
         swipeRefresh.setOnRefreshListener(() -> webView.reload());
 
         webView.loadUrl(APP_URL);
+
+        // Keep-alive: ping WebView setiap 5 detik supaya tidak di-throttle saat background
+        keepAliveHandler = new Handler();
+        keepAliveRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (webView != null) {
+                    webView.evaluateJavascript("(function(){ return typeof ytPlayer !== 'undefined' ? 1 : 0; })()", null);
+                }
+                keepAliveHandler.postDelayed(this, 5000);
+            }
+        };
     }
 
     @Override
@@ -112,6 +127,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         webView.onResume();
+        webView.resumeTimers();
         // Start foreground service supaya musik tetap jalan di background
         Intent serviceIntent = new Intent(this, MusicService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -119,17 +135,21 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startService(serviceIntent);
         }
+        // Mulai keep-alive
+        keepAliveHandler.post(keepAliveRunnable);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        // JANGAN panggil webView.onPause() supaya YouTube player tidak berhenti
+        // JANGAN panggil webView.onPause() atau webView.pauseTimers()
+        // supaya YouTube player tidak berhenti saat background
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (keepAliveHandler != null) keepAliveHandler.removeCallbacks(keepAliveRunnable);
         stopService(new Intent(this, MusicService.class));
         webView.destroy();
     }
