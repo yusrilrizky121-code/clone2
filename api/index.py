@@ -1,8 +1,11 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
 from fastapi import FastAPI
 from ytmusicapi import YTMusic
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
-import time
 
 app = FastAPI()
 
@@ -14,9 +17,6 @@ app.add_middleware(
 )
 
 ytmusic = YTMusic()
-
-home_cache = {}
-CACHE_TTL = 1800
 
 def format_results(search_results):
     cleaned = []
