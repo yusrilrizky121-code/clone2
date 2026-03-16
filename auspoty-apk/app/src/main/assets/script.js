@@ -443,19 +443,61 @@ function filterMood(el, query, id) {
     fetchTrackGrid(query, id, 6);
 }
 
-// HOME: semua lagu dalam grid 2 kolom
+// HOME: Apple Music style sections
+async function fetchAndRenderGrid(query, id, limit = 6) {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        const el = document.getElementById(id);
+        if (result.status === 'success' && result.data.length > 0 && el) {
+            el.innerHTML = result.data.map(t => createGridHTML(t)).join('');
+        }
+    } catch (e) {}
+}
+
+async function fetchAndRenderRow(query, id, limit = 8) {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        const el = document.getElementById(id);
+        if (result.status === 'success' && result.data.length > 0 && el) {
+            el.innerHTML = result.data.map(t => createRowHTML(t)).join('');
+        }
+    } catch (e) {}
+}
+
+function createGridHTML(track) {
+    const img = getHighResImage(track.thumbnail || track.img || '');
+    const artist = track.artist || 'Unknown';
+    const data = encodeURIComponent(JSON.stringify({ videoId: track.videoId, title: track.title, artist, img }));
+    return `<div class="am-grid-item" onclick="playMusic('${track.videoId}','${data}')">
+        <img src="${img}" class="am-grid-img" onerror="this.src='https://placehold.co/300x300/1c1c1e/FFFFFF?text=Music'">
+        <div class="am-grid-title">${track.title}</div>
+        <div class="am-grid-artist">${artist}</div>
+    </div>`;
+}
+
+function createRowHTML(track) {
+    const img = getHighResImage(track.thumbnail || track.img || '');
+    const artist = track.artist || 'Unknown';
+    const data = encodeURIComponent(JSON.stringify({ videoId: track.videoId, title: track.title, artist, img }));
+    return `<div class="am-row-card" onclick="playMusic('${track.videoId}','${data}')">
+        <img src="${img}" class="am-row-img" onerror="this.src='https://placehold.co/140x140/1c1c1e/FFFFFF?text=Music'">
+        <div class="am-row-title">${track.title}</div>
+        <div class="am-row-artist">${artist}</div>
+    </div>`;
+}
+
 function loadHomeData() {
     loadHeroBanner();
-    const queries = [
-        'lagu indonesia hits terbaru',
-        'lagu pop indonesia rilis terbaru',
-        'lagu fyp tiktok viral',
-        'lagu galau sedih indonesia',
-        'kpop hits terbaru',
-        'hit terpopuler hari ini',
-        'rnb indonesia hits',
-        'lagu ceria gembira semangat',
-    ];
+    fetchAndRenderGrid('lagu indonesia hits terbaru', 'homeGrid1', 6);
+    fetchAndRenderRow('hit terpopuler hari ini', 'homeRow1', 8);
+    fetchAndRenderGrid('lagu fyp tiktok viral', 'homeGrid2', 6);
+    fetchAndRenderRow('lagu galau sedih indonesia', 'homeRow2', 8);
+}
+
+// DEAD CODE KEPT FOR COMPAT
+function _oldLoadHomeData() {
     const seen = new Set();
     const container = document.getElementById('homeList');
     if (container) container.innerHTML = '<div style="color:var(--text2);text-align:center;padding:32px;font-size:14px;grid-column:1/-1;">Memuat lagu...</div>';
