@@ -432,16 +432,43 @@ function filterMood(el, query, id) {
     fetchTrackGrid(query, id, 6);
 }
 
+// HOME: semua lagu dalam satu list
 function loadHomeData() {
     loadHeroBanner();
-    fetchTrackGrid('lagu indonesia hits terbaru', 'moodList', 6);
-    fetchCardRow('lagu pop indonesia rilis terbaru', 'rowAnyar');
-    fetchRankList('top 50 indonesia playlist', 'rowCharts', 5);
-    renderGenreGrid();
-    fetchCardRow('lagu fyp tiktok viral', 'rowTiktok');
-    fetchCardRow('penyanyi pop indonesia hits', 'rowArtists', true);
-    fetchCardRow('lagu galau sedih indonesia', 'rowGalau');
-    fetchCardRow('hit terpopuler hari ini', 'rowHits');
+    const queries = [
+        'lagu indonesia hits terbaru',
+        'lagu pop indonesia rilis terbaru',
+        'lagu fyp tiktok viral',
+        'lagu galau sedih indonesia',
+        'kpop hits terbaru',
+        'hit terpopuler hari ini',
+        'rnb indonesia hits',
+        'lagu ceria gembira semangat',
+    ];
+    const seen = new Set();
+    const container = document.getElementById('homeList');
+    if (container) container.innerHTML = '<div style="color:var(--text2);text-align:center;padding:32px;font-size:14px;">Memuat lagu...</div>';
+    let allTracks = [], done = 0;
+    queries.forEach(q => {
+        fetch(`${API_BASE}/api/search?query=${encodeURIComponent(q)}&limit=8`)
+            .then(r => r.json())
+            .then(result => {
+                if (result.status === 'success') {
+                    result.data.forEach(t => {
+                        if (!seen.has(t.videoId)) { seen.add(t.videoId); allTracks.push(t); }
+                    });
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                done++;
+                if (done === queries.length && container) {
+                    container.innerHTML = allTracks.length
+                        ? allTracks.map(t => createListHTML(t)).join('')
+                        : '<div style="color:var(--text2);text-align:center;padding:32px;">Gagal memuat lagu.</div>';
+                }
+            });
+    });
 }
 
 // SEARCH
