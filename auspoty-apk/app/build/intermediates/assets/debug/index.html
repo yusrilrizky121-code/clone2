@@ -2,38 +2,116 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Auspoty - Music & Lyrics</title>
-    <meta name="theme-color" content="#121212">
-    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/174/174872.png">
+    <link rel="stylesheet" href="/style.css">
     <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body>
 
-<!-- HOME VIEW -->
+<!-- ══ HOME ══════════════════════════════════════ -->
 <div id="view-home" class="view-section active">
+
     <div class="home-header">
-        <div class="app-logo">🎵 Auspoty</div>
-        <div class="pill active">Semua</div>
-        <div class="pill">Musik</div>
-        <div class="pill">Podcast</div>
+        <div>
+            <div class="greeting-time" id="greetingTime">Selamat Datang</div>
+            <div class="app-logo">Auspoty</div>
+        </div>
+        <button id="installAppBtn" class="hdr-install install-pwa-btn" style="display:none;">
+            <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        </button>
     </div>
-    <div class="section-container"><h2 class="section-title">Sering kamu dengarkan</h2><div class="vertical-list" id="recentList"><div class="loading-text">Memuat data...</div></div></div>
-    <div class="section-container"><h2 class="section-title">Rilis Anyar</h2><div class="horizontal-scroll" id="rowAnyar"></div></div>
-    <div class="section-container"><h2 class="section-title">Gembira & Semangat</h2><div class="horizontal-scroll" id="rowGembira"></div></div>
-    <div class="section-container"><h2 class="section-title">Tangga Lagu Populer</h2><div class="horizontal-scroll" id="rowCharts"></div></div>
-    <div class="section-container"><h2 class="section-title">Galau Terpopuler</h2><div class="horizontal-scroll" id="rowGalau"></div></div>
-    <div class="section-container"><h2 class="section-title">Viral TikTok</h2><div class="horizontal-scroll" id="rowTiktok"></div></div>
-    <div class="section-container"><h2 class="section-title">Baru Diputar</h2><div class="horizontal-scroll" id="rowBaru"></div></div>
-    <div class="section-container"><h2 class="section-title">Artis Terpopuler</h2><div class="horizontal-scroll" id="rowArtists"></div></div>
-    <div class="section-container"><h2 class="section-title">Hit Hari Ini</h2><div class="horizontal-scroll" id="rowHits"></div></div>
+
+    <!-- Hero Spotlight -->
+    <div class="spotlight" id="spotlightCard" onclick="playHeroTrack()">
+        <div class="spotlight-img" id="heroBg"></div>
+        <div class="spotlight-scrim"></div>
+        <div class="spotlight-body">
+            <div class="spotlight-tag"><span class="live-dot"></span>TRENDING</div>
+            <div class="spotlight-title" id="heroTitle">Memuat...</div>
+            <div class="spotlight-artist" id="heroArtist">—</div>
+            <div class="spotlight-cta">
+                <div class="cta-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+                <span class="cta-label">Putar Sekarang</span>
+                <div class="cta-heart" onclick="event.stopPropagation();toggleLike()">
+                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mood Chips -->
+    <div class="chip-row">
+        <div class="chip active" onclick="filterMood(this,'lagu indonesia hits terbaru','moodList')">Untukmu</div>
+        <div class="chip" onclick="filterMood(this,'lagu ceria gembira semangat','moodList')">Ceria</div>
+        <div class="chip" onclick="filterMood(this,'lagu galau sedih indonesia','moodList')">Galau</div>
+        <div class="chip" onclick="filterMood(this,'lagu fyp tiktok viral','moodList')">Viral</div>
+        <div class="chip" onclick="filterMood(this,'lagu pop indonesia rilis terbaru','moodList')">Baru</div>
+        <div class="chip" onclick="filterMood(this,'kpop hits terbaru','moodList')">K-Pop</div>
+        <div class="chip" onclick="filterMood(this,'rnb indonesia hits','moodList')">R&amp;B</div>
+    </div>
+
+    <!-- Mood Track Grid -->
+    <div class="track-grid" id="moodList"></div>
+
+    <!-- Rilis Anyar -->
+    <div class="home-section" style="margin-top:32px;">
+        <div class="sec-hdr">
+            <span class="sec-title">Rilis Anyar</span>
+            <span class="sec-more" onclick="searchByCategory('lagu pop indonesia rilis terbaru')">Lihat semua</span>
+        </div>
+        <div class="card-row" id="rowAnyar"></div>
+    </div>
+
+    <!-- Tangga Lagu -->
+    <div class="home-section">
+        <div class="sec-hdr">
+            <span class="sec-title">Tangga Lagu</span>
+            <span class="sec-more" onclick="searchByCategory('top 50 indonesia playlist')">Lihat semua</span>
+        </div>
+        <div class="rank-list" id="rowCharts"></div>
+    </div>
+
+    <!-- Genre -->
+    <div class="home-section">
+        <div class="sec-hdr"><span class="sec-title">Jelajahi Genre</span></div>
+        <div class="genre-tiles" id="genreGrid"></div>
+    </div>
+
+    <!-- Viral TikTok -->
+    <div class="home-section">
+        <div class="sec-hdr"><span class="sec-title">Viral TikTok</span></div>
+        <div class="card-row" id="rowTiktok"></div>
+    </div>
+
+    <!-- Artis Populer -->
+    <div class="home-section">
+        <div class="sec-hdr"><span class="sec-title">Artis Populer</span></div>
+        <div class="card-row" id="rowArtists"></div>
+    </div>
+
+    <!-- Galau -->
+    <div class="home-section">
+        <div class="sec-hdr"><span class="sec-title">Galau Terpopuler</span></div>
+        <div class="card-row" id="rowGalau"></div>
+    </div>
+
+    <!-- Hit Hari Ini -->
+    <div class="home-section">
+        <div class="sec-hdr"><span class="sec-title">Hit Hari Ini</span></div>
+        <div class="card-row" id="rowHits"></div>
+    </div>
+
 </div>
 
-<!-- SEARCH VIEW -->
+<!-- ══ SEARCH ════════════════════════════════════ -->
 <div id="view-search" class="view-section">
-    <div class="search-header-container">
-        <h1>Cari</h1>
-    </div>
+    <div class="search-header-container"><h1>Cari</h1></div>
     <div class="search-box-wrapper">
         <svg class="search-icon-input" viewBox="0 0 24 24"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 101.414-1.414l-4.344-4.344a9.157 9.157 0 002.077-5.816c0-5.14-4.226-9.279-9.407-9.279zm-7.407 9.279c0-4.006 3.302-7.279 7.407-7.279s7.407 3.273 7.407 7.279-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.279z"/></svg>
         <input type="text" class="search-box" id="searchInput" placeholder="Cari musik atau lirik...">
@@ -47,21 +125,17 @@
     </div>
 </div>
 
-<!-- LIBRARY VIEW -->
+<!-- ══ LIBRARY ═══════════════════════════════════ -->
 <div id="view-library" class="view-section">
     <div class="lib-header">
-        <div class="lib-header-left">
-            <h1 class="lib-title">Koleksi Kamu</h1>
-        </div>
-        <div class="lib-actions">
-            <svg viewBox="0 0 24 24" onclick="openCreatePlaylist()"><path d="M11 11V4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg>
-        </div>
+        <h1 class="lib-title">Koleksi</h1>
+        <svg viewBox="0 0 24 24" onclick="openCreatePlaylist()" style="width:28px;height:28px;fill:var(--accent);cursor:pointer;"><path d="M11 11V4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg>
     </div>
     <div class="lib-filters"><div class="pill active">Playlist</div></div>
     <div class="lib-list" id="libraryContainer"></div>
 </div>
 
-<!-- ARTIST VIEW -->
+<!-- ══ ARTIST ════════════════════════════════════ -->
 <div id="view-artist" class="view-section">
     <div class="artist-hero">
         <button class="back-btn" onclick="switchView('home')">
@@ -73,24 +147,24 @@
         <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
     </div>
     <div class="section-container" style="margin-top:24px;">
-        <h2 class="section-title" style="font-size:18px;">Populer</h2>
+        <h2 class="section-title">Populer</h2>
         <div class="vertical-list" id="artistTracksContainer"></div>
     </div>
 </div>
 
-<!-- PLAYLIST VIEW -->
+<!-- ══ PLAYLIST ══════════════════════════════════ -->
 <div id="view-playlist" class="view-section">
     <div class="playlist-hero">
         <button class="back-btn" onclick="switchView('library')">
             <svg viewBox="0 0 24 24"><path d="M15.957 2.793a1 1 0 010 1.414L8.164 12l7.793 7.793a1 1 0 11-1.414 1.414L5.336 12l9.207-9.207a1 1 0 011.414 0z"/></svg>
         </button>
-        <div style="display:flex;justify-content:center;margin:24px 0;">
-            <img id="playlistImageDisplay" src="" style="width:200px;height:200px;object-fit:cover;box-shadow:0 12px 30px rgba(0,0,0,0.6);">
+        <div style="display:flex;justify-content:center;margin:24px 0 16px;">
+            <img id="playlistImageDisplay" src="" style="width:200px;height:200px;object-fit:cover;border-radius:20px;box-shadow:0 16px 40px rgba(0,0,0,0.7);">
         </div>
-        <h1 id="playlistNameDisplay" style="font-size:24px;font-weight:700;margin-bottom:4px;">Playlist</h1>
-        <div id="playlistStatsDisplay" style="font-size:13px;color:var(--text-sub);margin-bottom:16px;">0 lagu</div>
+        <h1 id="playlistNameDisplay" style="font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-bottom:4px;">Playlist</h1>
+        <div id="playlistStatsDisplay" style="font-size:14px;color:var(--text2);margin-bottom:16px;">0 lagu</div>
         <div style="display:flex;justify-content:flex-end;">
-            <div class="play-pause-btn" style="width:56px;height:56px;" onclick="playFirstPlaylistTrack()">
+            <div class="play-pause-btn" style="width:56px;height:56px;margin:0;" onclick="playFirstPlaylistTrack()">
                 <svg viewBox="0 0 24 24" style="fill:black;width:28px;height:28px;"><path d="M8 5v14l11-7z"/></svg>
             </div>
         </div>
@@ -100,37 +174,31 @@
     </div>
 </div>
 
-<!-- DEVELOPER VIEW -->
+<!-- ══ DEVELOPER ═════════════════════════════════ -->
 <div id="view-developer" class="view-section">
     <div class="dev-hero">
         <h1>Tentang Aplikasi</h1>
         <p>Auspoty — Music & Lyrics</p>
     </div>
-
-    <div style="text-align:center;padding:24px 16px 0;">
+    <div style="text-align:center;padding:0 20px;">
         <div class="dev-avatar">Y</div>
-        <h2 style="font-size:26px;font-weight:800;margin-bottom:4px;letter-spacing:-0.5px;">Yusril</h2>
-        <p style="color:var(--spotify-green);font-size:13px;font-weight:600;margin-bottom:4px;letter-spacing:1px;text-transform:uppercase;">Developer & Creator</p>
-        <p style="color:var(--text-sub);font-size:13px;margin-bottom:14px;">+62 822-9770-6541</p>
+        <h2 style="font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:4px;">Yusril</h2>
+        <p style="color:var(--green);font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">Developer & Creator</p>
+        <p style="color:var(--text2);font-size:14px;margin-bottom:14px;">+62 822-9770-6541</p>
         <div class="dev-badge">● Auspoty v3.0.0 Online</div>
     </div>
-
-    <div class="section-container" style="padding:0 16px;margin-top:24px;">
-        <button id="installAppBtn" class="dev-cta-btn install-pwa-btn">
+    <div style="padding:0 16px;margin-top:8px;">
+        <button class="dev-cta-btn install-pwa-btn" id="installAppBtnDev" style="background:var(--green);color:black;border:none;display:none;margin-bottom:12px;">
             <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:black;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
             Install Aplikasi
         </button>
-
         <div class="dev-card">
             <div class="dev-card-title">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                 Informasi Project
             </div>
-            <p style="color:var(--text-sub);font-size:14px;line-height:1.6;">
-                Aplikasi <b>Auspoty</b> menggabungkan fitur pemutar musik dan pencarian lirik real-time dalam satu platform. Dibangun dengan teknologi PWA agar bisa diinstall seperti aplikasi native.
-            </p>
+            <p style="color:var(--text2);font-size:14px;line-height:1.6;">Aplikasi <b style="color:white;">Auspoty</b> menggabungkan pemutar musik dan pencarian lirik real-time. Dibangun dengan teknologi PWA agar bisa diinstall seperti aplikasi native.</p>
         </div>
-
         <div class="dev-card">
             <div class="dev-card-title">
                 <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
@@ -145,21 +213,19 @@
                 <li><span class="label">Hosting</span><span class="value">Vercel Serverless</span></li>
             </ul>
         </div>
-
-        <a href="https://wa.me/6282297706541" target="_blank" class="dev-cta-btn" style="background:#25D366;color:white;margin-top:8px;">
+        <a href="https://wa.me/6282297706541" target="_blank" class="dev-cta-btn" style="background:#25D366;color:white;border:none;">
             <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:white;"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.888-.788-1.489-1.761-1.663-2.06-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
             Hubungi Yusril (CR)
         </a>
-
         <div class="dev-footer-text">
             🎵 Auspoty — Music & Lyrics<br>
-            <span style="color:var(--spotify-green);font-weight:700;">Yusril</span> · WA: +62 822-9770-6541<br>
-            <span style="color:#535353;">Hak Cipta © 2026 Auspoty</span>
+            <span style="color:var(--green);font-weight:700;">Yusril</span> · WA: +62 822-9770-6541<br>
+            <span style="color:var(--text3);">Hak Cipta © 2026 Auspoty</span>
         </div>
     </div>
 </div>
 
-<!-- MINI PLAYER -->
+<!-- ══ MINI PLAYER ════════════════════════════════ -->
 <div id="miniPlayer" class="mini-player" onclick="expandPlayer()" style="display:none;">
     <img id="miniPlayerImg" src="" alt="Cover">
     <div class="mini-player-info">
@@ -172,7 +238,7 @@
     </div>
 </div>
 
-<!-- BOTTOM NAV -->
+<!-- ══ BOTTOM NAV ════════════════════════════════ -->
 <nav class="bottom-nav">
     <div class="nav-item active" onclick="switchView('home')">
         <svg viewBox="0 0 24 24"><path d="M12.5 3.247a1 1 0 00-1 0L4 7.577V20h4.5v-6a1 1 0 011-1h5a1 1 0 011 1v6H20V7.577l-7.5-4.33zm-2-1.732a3 3 0 013 0l7.5 4.33a2 2 0 011 1.732V21a1 1 0 01-1 1h-6.5a1 1 0 01-1-1v-6h-3v6a1 1 0 01-1 1H3a1 1 0 01-1-1V7.577a2 2 0 011-1.732l7.5-4.33z"/></svg>
@@ -192,15 +258,15 @@
     </div>
 </nav>
 
-<!-- FULL PLAYER MODAL -->
+<!-- ══ FULL PLAYER MODAL ══════════════════════════ -->
 <div id="playerModal" class="modal-overlay">
     <div id="playerBg"></div>
     <div class="player-content-wrapper">
         <div class="modal-header">
             <svg viewBox="0 0 24 24" onclick="minimizePlayer()" style="fill:white;width:28px;height:28px;cursor:pointer;"><path d="M15.957 2.793a1 1 0 010 1.414L8.164 12l7.793 7.793a1 1 0 11-1.414 1.414L5.336 12l9.207-9.207a1 1 0 011.414 0z" transform="rotate(-90 12 12)"/></svg>
             <div style="text-align:center;">
-                <span style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:white;">Memainkan Lagu</span><br>
-                <span style="font-size:12px;font-weight:700;color:white;">Auspoty</span>
+                <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Memainkan Lagu</div>
+                <div style="font-size:13px;font-weight:700;color:white;">Auspoty</div>
             </div>
             <svg viewBox="0 0 24 24" onclick="openLyricsModal()" style="fill:white;width:24px;height:24px;cursor:pointer;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h6v6h6v10H6zm2-7h8v2H8v-2zm0 4h5v2H8v-2z"/></svg>
         </div>
@@ -212,34 +278,31 @@
                 <div id="playerTitle" class="player-title">Judul Lagu</div>
                 <div id="playerArtist" class="player-artist">Artis</div>
             </div>
-            <svg id="btnLikeSong" viewBox="0 0 24 24" onclick="toggleLike()" style="width:28px;height:28px;flex-shrink:0;cursor:pointer;fill:white;margin-right:16px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-            <svg viewBox="0 0 24 24" onclick="openAddToPlaylistModal()" style="width:28px;height:28px;flex-shrink:0;cursor:pointer;fill:white;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+            <svg id="btnLikeSong" viewBox="0 0 24 24" onclick="toggleLike()" style="width:28px;height:28px;flex-shrink:0;cursor:pointer;fill:var(--text2);margin-right:14px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            <svg viewBox="0 0 24 24" onclick="openAddToPlaylistModal()" style="width:28px;height:28px;flex-shrink:0;cursor:pointer;fill:var(--text2);"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
         </div>
         <div class="progress-container">
             <input type="range" id="progressBar" class="progress-bar" value="0" min="0" max="100" step="1" oninput="seekTo(this.value)">
-            <div class="time-info">
-                <span id="currentTime">0:00</span>
-                <span id="totalTime">0:00</span>
-            </div>
+            <div class="time-info"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
         </div>
         <div class="playback-controls">
-            <svg viewBox="0 0 24 24" style="fill:var(--spotify-green);width:24px;height:24px;"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
-            <svg viewBox="0 0 24 24" style="fill:white;width:36px;height:36px;"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-            <div class="play-pause-btn" onclick="togglePlay()" style="width:64px;height:64px;border-radius:50%;background:white;display:flex;justify-content:center;align-items:center;cursor:pointer;">
+            <svg viewBox="0 0 24 24" style="fill:var(--green);width:24px;height:24px;"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+            <svg viewBox="0 0 24 24" style="fill:var(--text1);width:36px;height:36px;"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+            <div onclick="togglePlay()" style="width:68px;height:68px;border-radius:50%;background:white;display:flex;justify-content:center;align-items:center;cursor:pointer;box-shadow:0 4px 20px rgba(255,255,255,0.2);transition:transform 0.15s;" ontouchstart="this.style.transform='scale(0.92)'" ontouchend="this.style.transform='scale(1)'">
                 <svg id="mainPlayBtn" viewBox="0 0 24 24" style="fill:black;width:32px;height:32px;"><path d="M8 5v14l11-7z"/></svg>
             </div>
-            <svg viewBox="0 0 24 24" style="fill:white;width:36px;height:36px;"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-            <svg viewBox="0 0 24 24" style="fill:var(--text-sub);width:24px;height:24px;"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+            <svg viewBox="0 0 24 24" style="fill:var(--text1);width:36px;height:36px;"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            <svg viewBox="0 0 24 24" style="fill:var(--text2);width:24px;height:24px;"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
         </div>
     </div>
 </div>
 
-<!-- LYRICS MODAL -->
+<!-- ══ LYRICS MODAL ═══════════════════════════════ -->
 <div id="lyricsModal" class="modal-overlay">
     <div id="lyricsBg"></div>
     <div class="lyrics-content-wrapper">
         <div class="modal-header">
-            <h3 style="text-transform:uppercase;font-size:14px;letter-spacing:1px;color:white;">Lirik</h3>
+            <h3 style="text-transform:uppercase;font-size:13px;letter-spacing:1.5px;color:var(--text2);font-weight:700;">Lirik</h3>
             <div class="lyric-actions">
                 <svg class="lyric-btn" viewBox="0 0 24 24" onclick="openAddToPlaylistModal()"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                 <svg class="lyric-btn" id="btnLikeLyric" viewBox="0 0 24 24" onclick="toggleLike()"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -257,15 +320,13 @@
     </div>
 </div>
 
-<!-- CREATE PLAYLIST MODAL -->
+<!-- ══ CREATE PLAYLIST MODAL ═════════════════════ -->
 <div id="createPlaylistModal" style="display:none;">
     <div class="modal-overlay" style="display:flex;">
         <div class="cp-box">
             <div class="cp-title">Beri nama playlist barumu</div>
             <input type="text" id="cpName" class="cp-input" placeholder="Playlist baruku">
-            <label for="cpImageInput">
-                <img id="cpPreview" class="cp-img-preview" src="https://via.placeholder.com/120x120?text=+" alt="Upload">
-            </label>
+            <label for="cpImageInput"><img id="cpPreview" class="cp-img-preview" src="https://via.placeholder.com/120x120?text=+" alt="Upload"></label>
             <input type="file" id="cpImageInput" style="display:none;" accept="image/*" onchange="previewImage(event)">
             <div class="cp-btn-row">
                 <button class="cp-btn cancel" onclick="closeCreatePlaylist()">Batal</button>
@@ -275,22 +336,20 @@
     </div>
 </div>
 
-<!-- ADD TO PLAYLIST MODAL -->
-<div id="addToPlaylistModal" class="modal-overlay" style="display:none;justify-content:flex-end;background:rgba(0,0,0,0.8);">
-    <div style="background:#282828;width:100%;height:60vh;border-radius:20px 20px 0 0;padding:20px;display:flex;flex-direction:column;z-index:10;">
+<!-- ══ ADD TO PLAYLIST MODAL ═════════════════════ -->
+<div id="addToPlaylistModal" class="modal-overlay" style="display:none;justify-content:flex-end;background:rgba(0,0,0,0.7);">
+    <div style="background:var(--bg2);width:100%;max-height:60vh;border-radius:24px 24px 0 0;padding:20px;display:flex;flex-direction:column;z-index:10;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <h3 style="font-size:18px;font-weight:700;color:white;">Tambahkan ke Playlist</h3>
+            <h3 style="font-size:18px;font-weight:700;">Tambahkan ke Playlist</h3>
             <div onclick="closeAddToPlaylistModal()" class="close-btn">✕</div>
         </div>
         <div id="addToPlaylistList" class="vertical-list" style="overflow-y:auto;flex:1;padding:0;"></div>
     </div>
 </div>
 
-<!-- TOAST -->
+<!-- ══ TOAST ══════════════════════════════════════ -->
 <div id="customToast" class="toast-notification">Notifikasi</div>
-
 <div id="youtube-player" style="display:none;"></div>
-
-<script src="script.js"></script>
+<script src="/script.js"></script>
 </body>
 </html>

@@ -13,6 +13,7 @@ dbReq.onsuccess = (e) => { db = e.target.result; renderLibraryUI(); };
 
 // YOUTUBE PLAYER
 let ytPlayer, isPlaying = false, currentTrack = null, progressInterval;
+let nextTrackQueue = [];
 
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
@@ -26,13 +27,14 @@ function onPlayerStateChange(event) {
     const pausePath = "M6 19h4V5H6v14zm8-14v14h4V5h-4z";
     const mainBtn = document.getElementById('mainPlayBtn');
     const miniBtn = document.getElementById('miniPlayBtn');
-
     if (event.data == YT.PlayerState.PLAYING) {
         isPlaying = true;
         mainBtn.innerHTML = `<path d="${pausePath}"/>`;
         miniBtn.innerHTML = `<path d="${pausePath}"/>`;
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+        // Pre-fetch next songs saat lagu mulai (masih foreground)
+        setTimeout(prefetchNextSongs, 3000);
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
         mainBtn.innerHTML = `<path d="${playPath}"/>`;
@@ -59,8 +61,30 @@ function updateMediaSession() {
     }
 }
 
+async function prefetchNextSongs() {
+    if (!currentTrack) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(currentTrack.artist + " official audio")}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            nextTrackQueue = result.data
+                .filter(t => t.videoId !== currentTrack.videoId)
+                .map(t => {
+                    const img = getHighResImage(t.thumbnail || t.img || '');
+                    return { videoId: t.videoId, title: t.title, artist: t.artist || 'Unknown', img };
+                });
+        }
+    } catch (e) {}
+}
+
 async function playNextSimilarSong() {
     if (!currentTrack) return;
+    if (nextTrackQueue.length > 0) {
+        const next = nextTrackQueue.splice(Math.floor(Math.random() * nextTrackQueue.length), 1)[0];
+        playMusic(next.videoId, encodeURIComponent(JSON.stringify(next)));
+        setTimeout(prefetchNextSongs, 2000);
+        return;
+    }
     try {
         const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(currentTrack.artist + " official audio")}`);
         const result = await res.json();
@@ -79,7 +103,6 @@ function playMusic(videoId, encodedData) {
     currentTrack = JSON.parse(decodeURIComponent(encodedData));
     checkIfLiked(currentTrack.videoId);
     updateMediaSession();
-
     document.getElementById('miniPlayer').style.display = 'flex';
     document.getElementById('miniPlayerImg').src = currentTrack.img;
     document.getElementById('miniPlayerTitle').innerText = currentTrack.title;
@@ -91,7 +114,6 @@ function playMusic(videoId, encodedData) {
     document.getElementById('progressBar').value = 0;
     document.getElementById('currentTime').innerText = "0:00";
     document.getElementById('totalTime').innerText = "0:00";
-
     if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
 }
 
@@ -134,60 +156,56 @@ function seekTo(value) {
     }
 }
 
-// LYRICS SPOTIFY-STYLE
-let lyricsLines = [];
-let lyricsScrollInterval = null;
-let currentHighlightIdx = -1;
-let lyricsType = 'plain';
+// LYRICS
+let lyricsLines = [], lyricsScrollInterval = null, currentHighlightIdx = -1, lyricsType = 'plain';
 
 async function openLyricsModal() {
     if (!currentTrack) return;
     const modal = document.getElementById('lyricsModal');
-    const body = document.getElementById('lyricsBody');
+    const lyricsBody = document.getElementById('lyricsBody');
     document.getElementById('lyricsTrackImg').src = currentTrack.img;
     document.getElementById('lyricsTrackTitle').innerText = currentTrack.title;
     document.getElementById('lyricsTrackArtist').innerText = currentTrack.artist;
-    document.getElementById('lyricsBg').style.backgroundImage = "url('" + currentTrack.img + "')";
+    document.getElementById('lyricsBg').style.backgroundImage = `url('${currentTrack.img}')`;
     modal.style.display = 'flex';
-    body.innerHTML = '<div style="color:rgba(255,255,255,0.5);font-size:16px;text-align:center;margin-top:40px;">Menarik lirik... </div>';
+    lyricsBody.innerHTML = '<div style="color:rgba(255,255,255,0.5);font-size:16px;text-align:center;margin-top:40px;">Menarik lirik...</div>';
     stopLyricsScroll();
-    lyricsLines = [];
-    currentHighlightIdx = -1;
+    lyricsLines = []; currentHighlightIdx = -1;
     try {
-        const res = await fetch(API_BASE + "/api/lyrics?video_id=" + currentTrack.videoId);
+        const res = await fetch(`${API_BASE}/api/lyrics?video_id=` + currentTrack.videoId);
         const result = await res.json();
         if (result.status === 'success' && result.data && result.data.lines && result.data.lines.length > 0) {
             lyricsLines = result.data.lines;
             lyricsType = result.data.type || 'plain';
-            renderLyricsLines(body);
-            startLyricsScroll(body);
+            renderLyricsLines(lyricsBody);
+            startLyricsScroll(lyricsBody);
         } else {
-            body.innerHTML = '<div style="color:rgba(255,255,255,0.5);font-size:16px;text-align:center;margin-top:40px;">Lirik belum tersedia untuk lagu ini.</div>';
+            lyricsBody.innerHTML = '<div style="color:rgba(255,255,255,0.5);font-size:16px;text-align:center;margin-top:40px;">Lirik belum tersedia untuk lagu ini.</div>';
         }
     } catch (e) {
-        body.innerHTML = '<div style="color:#ff5252;font-size:16px;text-align:center;margin-top:40px;">Gagal memuat lirik.</div>';
+        lyricsBody.innerHTML = '<div style="color:#ff5252;font-size:16px;text-align:center;margin-top:40px;">Gagal memuat lirik.</div>';
     }
 }
 
-function renderLyricsLines(body) {
+function renderLyricsLines(lyricsBody) {
     let html = '<div style="height:45vh"></div>';
-    lyricsLines.forEach(function(line, i) {
-        html += '<div class="lyric-line" id="lyric-line-' + i + '">' + line.text + '</div>';
+    lyricsLines.forEach((line, i) => {
+        html += `<div class="lyric-line" id="lyric-line-${i}">${line.text}</div>`;
     });
     html += '<div style="height:45vh"></div>';
-    body.innerHTML = html;
+    lyricsBody.innerHTML = html;
 }
 
-function startLyricsScroll(body) {
+function startLyricsScroll(lyricsBody) {
     stopLyricsScroll();
-    lyricsScrollInterval = setInterval(function() {
+    lyricsScrollInterval = setInterval(() => {
         if (!ytPlayer || !ytPlayer.getCurrentTime) return;
-        var cur = ytPlayer.getCurrentTime();
-        var dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        const cur = ytPlayer.getCurrentTime();
+        const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
         if (!dur || dur <= 0 || lyricsLines.length === 0) return;
-        var idx = 0;
+        let idx = 0;
         if (lyricsType === 'synced') {
-            for (var i = 0; i < lyricsLines.length; i++) {
+            for (let i = 0; i < lyricsLines.length; i++) {
                 if (lyricsLines[i].time !== null && lyricsLines[i].time <= cur) idx = i;
             }
         } else {
@@ -195,12 +213,12 @@ function startLyricsScroll(body) {
         }
         if (idx === currentHighlightIdx) return;
         currentHighlightIdx = idx;
-        lyricsLines.forEach(function(_, i) {
-            var el = document.getElementById('lyric-line-' + i);
+        lyricsLines.forEach((_, i) => {
+            const el = document.getElementById(`lyric-line-${i}`);
             if (!el) return;
             el.className = 'lyric-line' + (i === idx ? ' lyric-active' : (i < idx ? ' lyric-past' : ''));
         });
-        var activeLine = document.getElementById('lyric-line-' + idx);
+        const activeLine = document.getElementById(`lyric-line-${idx}`);
         if (activeLine) activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 300);
 }
@@ -212,9 +230,7 @@ function stopLyricsScroll() {
 function closeLyrics() {
     document.getElementById('lyricsModal').style.display = 'none';
     document.getElementById('lyricsBody').innerHTML = '';
-    stopLyricsScroll();
-    lyricsLines = [];
-    currentHighlightIdx = -1;
+    stopLyricsScroll(); lyricsLines = []; currentHighlightIdx = -1;
 }
 
 // BACKGROUND AUDIO
@@ -230,6 +246,7 @@ document.addEventListener('visibilitychange', function() {
         }
     }
 });
+
 // TOAST
 let toastTimeout;
 function showToast(msg) {
@@ -251,7 +268,7 @@ function switchView(name) {
     window.scrollTo(0, 0);
 }
 
-// RENDER
+// RENDER HELPERS
 const dotsSvg = '<svg class="dots-icon" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>';
 
 function getHighResImage(url) {
@@ -283,14 +300,38 @@ function createCardHTML(track, isArtist = false) {
     </div>`;
 }
 
-async function fetchSection(query, id, type, isArtist = false, limit = 8) {
-    try {
-        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
-        const result = await res.json();
-        if (result.status === 'success' && result.data.length > 0) {
-            renderSection(result.data, id, type, isArtist);
-        }
-    } catch (e) {}
+function createTrackGridHTML(track) {
+    const img = getHighResImage(track.thumbnail || track.img || '');
+    const artist = track.artist || 'Unknown';
+    const data = encodeURIComponent(JSON.stringify({ videoId: track.videoId, title: track.title, artist, img }));
+    return `<div class="tg-item" onclick="playMusic('${track.videoId}','${data}')">
+        <img src="${img}" class="tg-img" onerror="this.src='https://placehold.co/46x46/282828/FFFFFF?text=Music'">
+        <div class="tg-info"><div class="tg-title">${track.title}</div><div class="tg-artist">${artist}</div></div>
+    </div>`;
+}
+
+function createCardRowHTML(track, isArtist = false) {
+    const img = getHighResImage(track.thumbnail || track.img || '');
+    const artist = track.artist || 'Unknown';
+    const data = encodeURIComponent(JSON.stringify({ videoId: track.videoId, title: track.title, artist, img }));
+    const click = isArtist ? `openArtistView('${track.title}')` : `playMusic('${track.videoId}','${data}')`;
+    return `<div class="cr-card" onclick="${click}">
+        <img src="${img}" class="cr-img${isArtist ? ' circle' : ''}" onerror="this.src='https://placehold.co/148x148/282828/FFFFFF?text=Music'">
+        <div class="cr-title">${track.title}</div>
+        <div class="cr-sub">${isArtist ? 'Artis' : artist}</div>
+    </div>`;
+}
+
+function createRankHTML(track, num) {
+    const img = getHighResImage(track.thumbnail || track.img || '');
+    const artist = track.artist || 'Unknown';
+    const data = encodeURIComponent(JSON.stringify({ videoId: track.videoId, title: track.title, artist, img }));
+    const numClass = num === 1 ? 'rank-num gold' : num === 2 ? 'rank-num silver' : num === 3 ? 'rank-num bronze' : 'rank-num';
+    return `<div class="rank-item" onclick="playMusic('${track.videoId}','${data}')">
+        <div class="${numClass}">${num}</div>
+        <img src="${img}" class="rank-img" onerror="this.src='https://placehold.co/52x52/282828/FFFFFF?text=Music'">
+        <div class="rank-info"><div class="rank-title">${track.title}</div><div class="rank-artist">${artist}</div></div>
+    </div>`;
 }
 
 function renderSection(tracks, id, type, isArtist = false) {
@@ -299,17 +340,111 @@ function renderSection(tracks, id, type, isArtist = false) {
     el.innerHTML = tracks.map(t => type === 'list' ? createListHTML(t) : createCardHTML(t, isArtist)).join('');
 }
 
-function loadHomeData() {
-    fetchSection('lagu indonesia hits terbaru', 'recentList', 'list', false, 4);
-    fetchSection('lagu pop indonesia rilis terbaru', 'rowAnyar', 'card');
-    fetchSection('lagu ceria gembira semangat', 'rowGembira', 'card');
-    fetchSection('top 50 indonesia playlist', 'rowCharts', 'card');
-    fetchSection('lagu galau sedih indonesia', 'rowGalau', 'card');
-    fetchSection('lagu fyp tiktok viral', 'rowTiktok', 'card');
-    fetchSection('penyanyi pop indonesia hits', 'rowArtists', 'card', true);
-    fetchSection('hit terpopuler hari ini', 'rowHits', 'card');
+async function fetchSection(query, id, type, isArtist = false, limit = 8) {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) renderSection(result.data, id, type, isArtist);
+    } catch (e) {}
 }
 
+async function fetchTrackGrid(query, id, limit = 6) {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = result.data.map(t => createTrackGridHTML(t)).join('');
+        }
+    } catch (e) {}
+}
+
+async function fetchCardRow(query, id, isArtist = false, limit = 8) {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = result.data.map(t => createCardRowHTML(t, isArtist)).join('');
+        }
+    } catch (e) {}
+}
+
+async function fetchRankList(query, id, limit = 5) {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = result.data.map((t, i) => createRankHTML(t, i + 1)).join('');
+        }
+    } catch (e) {}
+}
+
+// HERO BANNER
+let heroTrack = null;
+
+function playHeroTrack() {
+    if (!heroTrack) return;
+    const img = getHighResImage(heroTrack.thumbnail || heroTrack.img || '');
+    playMusic(heroTrack.videoId, encodeURIComponent(JSON.stringify({ videoId: heroTrack.videoId, title: heroTrack.title, artist: heroTrack.artist || 'Unknown', img })));
+}
+
+async function loadHeroBanner() {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=lagu indonesia hits terbaru&limit=10`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            heroTrack = result.data[Math.floor(Math.random() * Math.min(5, result.data.length))];
+            const img = getHighResImage(heroTrack.thumbnail || heroTrack.img || '');
+            document.getElementById('heroBg').style.backgroundImage = `url('${img}')`;
+            document.getElementById('heroTitle').innerText = heroTrack.title;
+            document.getElementById('heroArtist').innerText = heroTrack.artist || 'Unknown';
+        }
+    } catch (e) {}
+}
+
+function renderGenreGrid() {
+    const genres = [
+        { label: 'Pop', emoji: '🎸', color: '#e8115b', q: 'lagu pop indonesia' },
+        { label: 'Indie', emoji: '💿', color: '#477d95', q: 'lagu indie indonesia' },
+        { label: 'R&B', emoji: '🎤', color: '#8d67ab', q: 'rnb indonesia hits' },
+        { label: 'TikTok', emoji: '🔥', color: '#e1118c', q: 'lagu fyp tiktok viral' },
+        { label: 'Galau', emoji: '😢', color: '#1e3264', q: 'lagu galau sedih' },
+        { label: 'K-Pop', emoji: '🌏', color: '#739c18', q: 'kpop hits terbaru' },
+        { label: 'Dangdut', emoji: '🥁', color: '#c84b31', q: 'dangdut hits indonesia' },
+        { label: 'Jazz', emoji: '🎷', color: '#2d6a4f', q: 'jazz indonesia relax' },
+        { label: 'Rock', emoji: '🤘', color: '#3d3d3d', q: 'rock indonesia hits' },
+    ];
+    document.getElementById('genreGrid').innerHTML = genres.map(g =>
+        `<div class="gt-card" style="background:${g.color};" onclick="searchByCategory('${g.q}')">
+            <span class="gt-emoji">${g.emoji}</span>
+            <span class="gt-label">${g.label}</span>
+        </div>`
+    ).join('');
+}
+
+function filterMood(el, query, id) {
+    document.querySelectorAll('.chip').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    const list = document.getElementById(id);
+    if (list) list.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;">Memuat...</div>';
+    fetchTrackGrid(query, id, 6);
+}
+
+function loadHomeData() {
+    loadHeroBanner();
+    fetchTrackGrid('lagu indonesia hits terbaru', 'moodList', 6);
+    fetchCardRow('lagu pop indonesia rilis terbaru', 'rowAnyar');
+    fetchRankList('top 50 indonesia playlist', 'rowCharts', 5);
+    renderGenreGrid();
+    fetchCardRow('lagu fyp tiktok viral', 'rowTiktok');
+    fetchCardRow('penyanyi pop indonesia hits', 'rowArtists', true);
+    fetchCardRow('lagu galau sedih indonesia', 'rowGalau');
+    fetchCardRow('hit terpopuler hari ini', 'rowHits');
+}
+
+// SEARCH
 function renderSearchCategories() {
     const cats = [
         { title: 'Dibuat Untuk Kamu', color: '#8d67ab', img: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=100&q=80' },
@@ -330,6 +465,7 @@ function renderSearchCategories() {
 }
 
 function searchByCategory(title) {
+    switchView('search');
     document.getElementById('searchInput').value = title;
     document.getElementById('searchInput').dispatchEvent(new Event('input'));
 }
@@ -350,9 +486,8 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
         try {
             const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(q)}`);
             const result = await res.json();
-            if (result.status === 'success') {
+            if (result.status === 'success')
                 document.getElementById('searchResults').innerHTML = result.data.map(t => createListHTML(t)).join('');
-            }
         } catch (e) {}
     }, 600);
 });
@@ -387,7 +522,7 @@ function checkIfLiked(videoId) {
         const liked = !!req.result;
         ['btnLikeSong', 'btnLikeLyric'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) { el.style.fill = liked ? '#1ed760' : 'white'; }
+            if (el) el.style.fill = liked ? '#1ed760' : 'white';
         });
     };
 }
@@ -423,7 +558,6 @@ function renderLibraryUI() {
                 <div class="lib-item-sub">Playlist • ${req.result.length} lagu</div>
             </div>
         </div>`;
-
         const reqP = db.transaction("playlists", "readonly").objectStore("playlists").getAll();
         reqP.onsuccess = () => {
             reqP.result.forEach(p => {
