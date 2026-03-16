@@ -13,8 +13,44 @@ body { background-color: var(--bg-base); color: var(--text-main); overflow-x: hi
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* HOME */
-.home-header { padding: 16px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: var(--bg-base); z-index: 50; }
-.app-logo { font-size: 18px; font-weight: 800; color: var(--spotify-green); margin-right: auto; }
+.home-header { padding: 16px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: rgba(18,18,18,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 50; }
+.app-logo { font-size: 20px; font-weight: 800; color: var(--spotify-green); margin-right: auto; letter-spacing: -0.5px; }
+.header-install-btn { background: rgba(30,215,96,0.15); border: 1px solid rgba(30,215,96,0.3); border-radius: 20px; padding: 8px 12px; display: flex; align-items: center; cursor: pointer; }
+.header-install-btn svg { fill: var(--spotify-green); width: 18px; height: 18px; }
+
+/* HERO BANNER */
+.hero-banner { position: relative; margin: 0 16px 24px; border-radius: 20px; overflow: hidden; height: 220px; }
+.hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center; filter: brightness(0.45); transform: scale(1.05); transition: background 0.6s ease; }
+.hero-content { position: relative; z-index: 2; padding: 24px 20px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+.hero-label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--spotify-green); margin-bottom: 6px; }
+.hero-title { font-size: 22px; font-weight: 800; color: white; line-height: 1.2; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-artist { font-size: 13px; color: rgba(255,255,255,0.7); margin-bottom: 14px; }
+.hero-play-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--spotify-green); color: black; border: none; border-radius: 24px; padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer; width: fit-content; }
+.hero-play-btn svg { fill: black; width: 18px; height: 18px; }
+
+/* MOOD PILLS */
+.mood-row { display: flex; gap: 10px; padding: 0 16px 20px; overflow-x: auto; }
+.mood-row::-webkit-scrollbar { display: none; }
+.mood-pill { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.2s; flex-shrink: 0; }
+.mood-pill.active { background: var(--spotify-green); color: black; border-color: var(--spotify-green); }
+
+/* SECTION HEADER */
+.section-header { display: flex; justify-content: space-between; align-items: center; margin: 0 16px 14px; }
+.section-header .section-title { margin: 0; }
+.see-all { font-size: 12px; color: var(--text-sub); font-weight: 600; cursor: pointer; }
+
+/* GENRE GRID */
+.genre-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 16px; }
+.genre-card { border-radius: 12px; height: 72px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; cursor: pointer; position: relative; overflow: hidden; text-align: center; padding: 8px; }
+.genre-card::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.25); }
+.genre-card span { position: relative; z-index: 1; line-height: 1.3; }
+
+/* CHART LIST */
+.chart-list { padding: 0 16px; display: flex; flex-direction: column; gap: 4px; }
+.chart-item { display: grid; grid-template-columns: 28px 48px 1fr 24px; gap: 12px; align-items: center; cursor: pointer; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.chart-num { font-size: 16px; font-weight: 800; color: var(--text-sub); text-align: center; }
+.chart-num.top3 { color: var(--spotify-green); }
+
 .pill { background: #2a2a2a; color: white; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .pill.active { background: var(--spotify-green); color: black; }
 .loading-text { color: #a7a7a7; font-size: 13px; }
@@ -146,8 +182,6 @@ body { background-color: var(--bg-base); color: var(--text-main); overflow-x: hi
 .lyric-line { font-size:22px; font-weight:700; line-height:1.7; color:rgba(255,255,255,0.3); transition:color 0.4s, font-size 0.3s, transform 0.3s; margin-bottom:4px; transform-origin:left center; padding:0 24px; }
 .lyric-line.lyric-active { color:#1ed760; font-size:26px; transform:scale(1.03); }
 .lyric-line.lyric-past { color:rgba(255,255,255,0.2); font-size:22px; transform:scale(1); }
-
-/* DEVELOPER */
 .dev-hero { background: linear-gradient(180deg, #1e3264 0%, var(--bg-base) 100%); padding: 60px 16px 30px; text-align: center; }
 .dev-hero h1 { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
 .dev-hero p { color: var(--text-sub); font-size: 14px; }

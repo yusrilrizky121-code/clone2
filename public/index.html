@@ -14,21 +14,98 @@
 
 <!-- HOME VIEW -->
 <div id="view-home" class="view-section active">
+    <!-- Header -->
     <div class="home-header">
         <div class="app-logo">🎵 Auspoty</div>
-        <div class="pill active">Semua</div>
-        <div class="pill">Musik</div>
-        <div class="pill">Podcast</div>
+        <div id="installAppBtn" class="header-install-btn" style="display:none;" onclick="installPWA()">
+            <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        </div>
     </div>
-    <div class="section-container"><h2 class="section-title">Sering kamu dengarkan</h2><div class="vertical-list" id="recentList"><div class="loading-text">Memuat data...</div></div></div>
-    <div class="section-container"><h2 class="section-title">Rilis Anyar</h2><div class="horizontal-scroll" id="rowAnyar"></div></div>
-    <div class="section-container"><h2 class="section-title">Gembira & Semangat</h2><div class="horizontal-scroll" id="rowGembira"></div></div>
-    <div class="section-container"><h2 class="section-title">Tangga Lagu Populer</h2><div class="horizontal-scroll" id="rowCharts"></div></div>
-    <div class="section-container"><h2 class="section-title">Galau Terpopuler</h2><div class="horizontal-scroll" id="rowGalau"></div></div>
-    <div class="section-container"><h2 class="section-title">Viral TikTok</h2><div class="horizontal-scroll" id="rowTiktok"></div></div>
-    <div class="section-container"><h2 class="section-title">Baru Diputar</h2><div class="horizontal-scroll" id="rowBaru"></div></div>
-    <div class="section-container"><h2 class="section-title">Artis Terpopuler</h2><div class="horizontal-scroll" id="rowArtists"></div></div>
-    <div class="section-container"><h2 class="section-title">Hit Hari Ini</h2><div class="horizontal-scroll" id="rowHits"></div></div>
+
+    <!-- Featured Hero Banner -->
+    <div class="hero-banner" id="heroBanner">
+        <div class="hero-bg" id="heroBg"></div>
+        <div class="hero-content">
+            <div class="hero-label">🔥 Trending Sekarang</div>
+            <div id="heroTitle" class="hero-title">Memuat...</div>
+            <div id="heroArtist" class="hero-artist">—</div>
+            <button class="hero-play-btn" id="heroPlayBtn" onclick="playHeroTrack()">
+                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                Putar Sekarang
+            </button>
+        </div>
+    </div>
+
+    <!-- Quick Mood Pills -->
+    <div class="mood-row">
+        <div class="mood-pill active" onclick="filterMood(this,'lagu indonesia hits terbaru','recentList')">🎵 Untukmu</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu ceria gembira semangat','recentList')">😊 Ceria</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu galau sedih indonesia','recentList')">💔 Galau</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu fyp tiktok viral','recentList')">🔥 Viral</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu pop indonesia rilis terbaru','recentList')">✨ Baru</div>
+    </div>
+
+    <!-- Recent / Mood List -->
+    <div class="section-container">
+        <div class="vertical-list" id="recentList"><div class="loading-text">Memuat data...</div></div>
+    </div>
+
+    <!-- Genre Blocks -->
+    <div class="section-container">
+        <h2 class="section-title">Jelajahi Genre</h2>
+        <div class="genre-grid" id="genreGrid"></div>
+    </div>
+
+    <!-- Rilis Anyar -->
+    <div class="section-container">
+        <div class="section-header">
+            <h2 class="section-title">Rilis Anyar</h2>
+            <span class="see-all" onclick="searchByCategory('lagu pop indonesia rilis terbaru')">Lihat semua</span>
+        </div>
+        <div class="horizontal-scroll" id="rowAnyar"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="section-container">
+        <div class="section-header">
+            <h2 class="section-title">📈 Tangga Lagu</h2>
+            <span class="see-all" onclick="searchByCategory('top 50 indonesia playlist')">Lihat semua</span>
+        </div>
+        <div class="chart-list" id="rowCharts"></div>
+    </div>
+
+    <!-- Viral TikTok -->
+    <div class="section-container">
+        <div class="section-header">
+            <h2 class="section-title">🎵 Viral TikTok</h2>
+            <span class="see-all" onclick="searchByCategory('lagu fyp tiktok viral')">Lihat semua</span>
+        </div>
+        <div class="horizontal-scroll" id="rowTiktok"></div>
+    </div>
+
+    <!-- Artis -->
+    <div class="section-container">
+        <div class="section-header">
+            <h2 class="section-title">Artis Populer</h2>
+        </div>
+        <div class="horizontal-scroll" id="rowArtists"></div>
+    </div>
+
+    <!-- Galau -->
+    <div class="section-container">
+        <div class="section-header">
+            <h2 class="section-title">💔 Galau Terpopuler</h2>
+        </div>
+        <div class="horizontal-scroll" id="rowGalau"></div>
+    </div>
+
+    <!-- Hit Hari Ini -->
+    <div class="section-container">
+        <div class="section-header">
+            <h2 class="section-title">⚡ Hit Hari Ini</h2>
+        </div>
+        <div class="horizontal-scroll" id="rowHits"></div>
+    </div>
 </div>
 
 <!-- SEARCH VIEW -->

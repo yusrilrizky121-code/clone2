@@ -13,6 +13,8 @@ dbReq.onsuccess = (e) => { db = e.target.result; renderLibraryUI(); };
 
 // YOUTUBE PLAYER
 let ytPlayer, isPlaying = false, currentTrack = null, progressInterval;
+let nextTrackQueue = []; // pre-fetched queue
+let prefetchDone = false;
 
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
@@ -59,8 +61,35 @@ function updateMediaSession() {
     }
 }
 
+async function prefetchNextSongs() {
+    if (!currentTrack) return;
+    prefetchDone = false;
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(currentTrack.artist + " official audio")}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            nextTrackQueue = result.data
+                .filter(t => t.videoId !== currentTrack.videoId)
+                .map(t => {
+                    const img = getHighResImage(t.thumbnail || t.img || '');
+                    return { videoId: t.videoId, title: t.title, artist: t.artist || 'Unknown', img };
+                });
+            prefetchDone = true;
+        }
+    } catch (e) {}
+}
+
 async function playNextSimilarSong() {
     if (!currentTrack) return;
+    // Pakai queue yang sudah di-prefetch kalau ada
+    if (nextTrackQueue.length > 0) {
+        const next = nextTrackQueue.splice(Math.floor(Math.random() * nextTrackQueue.length), 1)[0];
+        playMusic(next.videoId, encodeURIComponent(JSON.stringify(next)));
+        // Prefetch lagi untuk lagu berikutnya (async, tidak blocking)
+        setTimeout(prefetchNextSongs, 2000);
+        return;
+    }
+    // Fallback: fetch langsung (kalau queue kosong)
     try {
         const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(currentTrack.artist + " official audio")}`);
         const result = await res.json();
@@ -93,6 +122,10 @@ function playMusic(videoId, encodedData) {
     document.getElementById('totalTime').innerText = "0:00";
 
     if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+    // Pre-fetch lagu berikutnya saat lagu baru mulai (masih foreground)
+    nextTrackQueue = [];
+    prefetchDone = false;
+    setTimeout(prefetchNextSongs, 3000);
 }
 
 function togglePlay() {
@@ -230,7 +263,75 @@ document.addEventListener('visibilitychange', function() {
         }
     }
 });
-// TOAST
+let heroTrack = null;
+
+function playHeroTrack() {
+    if (!heroTrack) return;
+    const img = getHighResImage(heroTrack.thumbnail || heroTrack.img || '');
+    playMusic(heroTrack.videoId, encodeURIComponent(JSON.stringify({ videoId: heroTrack.videoId, title: heroTrack.title, artist: heroTrack.artist || 'Unknown', img })));
+}
+
+async function loadHeroBanner() {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=lagu indonesia hits terbaru&limit=10`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            heroTrack = result.data[Math.floor(Math.random() * Math.min(5, result.data.length))];
+            const img = getHighResImage(heroTrack.thumbnail || heroTrack.img || '');
+            document.getElementById('heroBg').style.backgroundImage = `url('${img}')`;
+            document.getElementById('heroTitle').innerText = heroTrack.title;
+            document.getElementById('heroArtist').innerText = heroTrack.artist || 'Unknown';
+        }
+    } catch (e) {}
+}
+
+function renderGenreGrid() {
+    const genres = [
+        { label: '🎸 Pop', color: '#e8115b', q: 'lagu pop indonesia' },
+        { label: '💿 Indie', color: '#477d95', q: 'lagu indie indonesia' },
+        { label: '🎤 R&B', color: '#8d67ab', q: 'rnb indonesia hits' },
+        { label: '🔥 TikTok', color: '#e1118c', q: 'lagu fyp tiktok viral' },
+        { label: '😢 Galau', color: '#1e3264', q: 'lagu galau sedih' },
+        { label: '🌏 K-Pop', color: '#739c18', q: 'kpop hits terbaru' },
+    ];
+    document.getElementById('genreGrid').innerHTML = genres.map(g =>
+        `<div class="genre-card" style="background:${g.color};" onclick="searchByCategory('${g.q}')">
+            <span>${g.label}</span>
+        </div>`
+    ).join('');
+}
+
+function createChartItemHTML(track, num) {
+    const img = getHighResImage(track.thumbnail || track.img || '');
+    const artist = track.artist || 'Unknown';
+    const data = encodeURIComponent(JSON.stringify({ videoId: track.videoId, title: track.title, artist, img }));
+    const numClass = num <= 3 ? 'chart-num top3' : 'chart-num';
+    return `<div class="chart-item" onclick="playMusic('${track.videoId}','${data}')">
+        <div class="${numClass}">${num}</div>
+        <img src="${img}" class="v-img" onerror="this.src='https://placehold.co/48x48/282828/FFFFFF?text=Music'">
+        <div class="v-info"><div class="v-title">${track.title}</div><div class="v-sub">${artist}</div></div>
+        ${dotsSvg}
+    </div>`;
+}
+
+async function fetchChartSection(query, id, limit = 5) {
+    try {
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = result.data.map((t, i) => createChartItemHTML(t, i + 1)).join('');
+        }
+    } catch (e) {}
+}
+
+function filterMood(el, query, id) {
+    document.querySelectorAll('.mood-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    const list = document.getElementById(id);
+    list.innerHTML = '<div class="loading-text" style="padding:16px;">Memuat...</div>';
+    fetchSection(query, id, 'list', false, 6);
+}
 let toastTimeout;
 function showToast(msg) {
     const t = document.getElementById('customToast');
@@ -300,13 +401,13 @@ function renderSection(tracks, id, type, isArtist = false) {
 }
 
 function loadHomeData() {
-    fetchSection('lagu indonesia hits terbaru', 'recentList', 'list', false, 4);
+    loadHeroBanner();
+    fetchSection('lagu indonesia hits terbaru', 'recentList', 'list', false, 6);
     fetchSection('lagu pop indonesia rilis terbaru', 'rowAnyar', 'card');
-    fetchSection('lagu ceria gembira semangat', 'rowGembira', 'card');
-    fetchSection('top 50 indonesia playlist', 'rowCharts', 'card');
-    fetchSection('lagu galau sedih indonesia', 'rowGalau', 'card');
+    fetchChartSection('top 50 indonesia playlist', 'rowCharts', 5);
     fetchSection('lagu fyp tiktok viral', 'rowTiktok', 'card');
     fetchSection('penyanyi pop indonesia hits', 'rowArtists', 'card', true);
+    fetchSection('lagu galau sedih indonesia', 'rowGalau', 'card');
     fetchSection('hit terpopuler hari ini', 'rowHits', 'card');
 }
 
@@ -538,4 +639,4 @@ function addTrackToPlaylist(id) {
     };
 }
 
-window.onload = () => { loadHomeData(); renderSearchCategories(); };
+window.onload = () => { loadHomeData(); renderSearchCategories(); renderGenreGrid(); };
