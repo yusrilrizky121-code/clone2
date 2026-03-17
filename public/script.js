@@ -688,75 +688,48 @@ async function downloadMusic() {
 
 
 // ===================== GOOGLE LOGIN =====================
-// Cara login persis seperti Metrolist:
-// Buka WebView ke accounts.google.com → user login → redirect ke music.youtube.com → ambil cookie
-// Tidak perlu Google Cloud Console / OAuth setup apapun.
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID'; // hanya untuk web fallback
+// Login Google via Firebase Auth — tidak butuh Google Cloud Console
+// Setup: console.firebase.google.com → Authentication → Google → Enable
+// Lalu ganti FIREBASE_CONFIG di index.html
 
 function loginWithGoogle() {
     const user = getGoogleUser();
     if (user) {
         if (confirm('Keluar dari akun ' + user.name + '?')) {
-            localStorage.removeItem('auspotyGoogleUser');
-            if (window.AndroidBridge) window.AndroidBridge.logout();
-            updateProfileUI();
-            showToast('Berhasil keluar');
+            if (window._firebaseSignOut) {
+                window._firebaseSignOut();
+            } else {
+                localStorage.removeItem('auspotyGoogleUser');
+                updateProfileUI();
+                showToast('Berhasil keluar');
+            }
         }
         return;
     }
-    // Di APK Android: buka LoginActivity (WebView Google login seperti Metrolist)
-    if (window.AndroidBridge && window.AndroidBridge.isAndroid()) {
-        window.AndroidBridge.openGoogleLogin();
+    // Cek apakah Firebase sudah dikonfigurasi
+    if (window._firebaseSignIn) {
+        // Cek apakah config sudah diisi (bukan placeholder)
+        if (typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey === 'FIREBASE_API_KEY') {
+            _showFirebaseSetupInfo();
+            return;
+        }
+        window._firebaseSignIn();
     } else {
-        // Di web: tampilkan modal GSI
-        _showLoginModal();
+        // Firebase belum load, tampilkan modal
+        document.getElementById('loginModal').style.display = 'flex';
     }
 }
 
-function _showLoginModal() {
-    const modal = document.getElementById('loginModal');
-    modal.style.display = 'flex';
-    if (window.google && window.google.accounts && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
-        try {
-            google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
-                callback: handleGoogleLogin,
-                auto_select: false,
-            });
-            const btnContainer = document.getElementById('googleSignInBtn');
-            if (btnContainer) {
-                btnContainer.innerHTML = '';
-                google.accounts.id.renderButton(btnContainer, {
-                    theme: 'filled_blue', size: 'large', width: 280,
-                    text: 'signin_with', shape: 'rectangular',
-                });
-            }
-        } catch(e) {}
-    }
+function _showFirebaseSetupInfo() {
+    document.getElementById('loginModal').style.display = 'flex';
 }
 
 function closeLoginModal() {
-    document.getElementById('loginModal').style.display = 'none';
+    const m = document.getElementById('loginModal');
+    if (m) m.style.display = 'none';
 }
 
-function handleGoogleLogin(response) {
-    try {
-        const parts = response.credential.split('.');
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        const user = {
-            name: payload.name || 'Pengguna Google',
-            email: payload.email || '',
-            picture: payload.picture || '',
-            sub: payload.sub || '',
-        };
-        localStorage.setItem('auspotyGoogleUser', JSON.stringify(user));
-        closeLoginModal();
-        updateProfileUI();
-        showToast('Selamat datang, ' + user.name.split(' ')[0] + '!');
-    } catch(e) {
-        showToast('Login gagal, coba lagi');
-    }
-}
+function handleGoogleLogin(response) {}
 
 function getGoogleUser() {
     try { return JSON.parse(localStorage.getItem('auspotyGoogleUser') || 'null'); } catch(e) { return null; }

@@ -11,7 +11,72 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/174/174872.png">
     <link rel="stylesheet" href="/style.css">
     <script src="https://www.youtube.com/iframe_api"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Firebase Auth SDK -->
+    <script type="module">
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+      import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+        from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+      // =====================================================
+      // GANTI CONFIG INI dengan config dari Firebase Console
+      // console.firebase.google.com → Project Settings → Your apps → Web
+      // =====================================================
+      const firebaseConfig = {
+        apiKey: "FIREBASE_API_KEY",
+        authDomain: "FIREBASE_AUTH_DOMAIN",
+        projectId: "FIREBASE_PROJECT_ID",
+        appId: "FIREBASE_APP_ID"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const provider = new GoogleAuthProvider();
+
+      // Expose ke window supaya bisa dipanggil dari script.js
+      window._firebaseAuth = auth;
+      window._firebaseProvider = provider;
+      window._firebaseSignIn = async function() {
+        try {
+          const result = await signInWithPopup(auth, provider);
+          const user = result.user;
+          const userData = {
+            name: user.displayName || 'Pengguna Google',
+            email: user.email || '',
+            picture: user.photoURL || '',
+            sub: user.uid || '',
+          };
+          localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+          if (typeof updateProfileUI === 'function') updateProfileUI();
+          if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+          const modal = document.getElementById('loginModal');
+          if (modal) modal.style.display = 'none';
+        } catch(e) {
+          console.error('Firebase login error:', e);
+          if (typeof showToast === 'function') showToast('Login gagal: ' + (e.message || 'coba lagi'));
+        }
+      };
+      window._firebaseSignOut = async function() {
+        try {
+          await signOut(auth);
+          localStorage.removeItem('auspotyGoogleUser');
+          if (typeof updateProfileUI === 'function') updateProfileUI();
+          if (typeof showToast === 'function') showToast('Berhasil keluar');
+        } catch(e) {}
+      };
+      // Cek status login saat load
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          const userData = {
+            name: user.displayName || 'Pengguna Google',
+            email: user.email || '',
+            picture: user.photoURL || '',
+            sub: user.uid || '',
+          };
+          localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+          if (typeof updateProfileUI === 'function') updateProfileUI();
+        }
+      });
+    </script>
 </head>
 <body>
 
@@ -465,12 +530,19 @@
 <!-- GOOGLE LOGIN MODAL -->
 <div id="loginModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);align-items:center;justify-content:center;">
     <div style="background:#1a1a2e;border-radius:20px;padding:32px 24px 28px;width:90%;max-width:360px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.8);position:relative;">
-        <button onclick="closeLoginModal()" style="position:absolute;top:14px;right:14px;background:rgba(255,255,255,0.1);border:none;color:white;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+        <button onclick="closeLoginModal()" style="position:absolute;top:14px;right:14px;background:rgba(255,255,255,0.1);border:none;color:white;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;">✕</button>
         <div style="font-size:44px;margin-bottom:10px;">🎵</div>
         <h2 style="color:white;font-size:22px;font-weight:700;margin-bottom:6px;">Masuk ke Auspoty</h2>
         <p style="color:rgba(255,255,255,0.55);font-size:13px;margin-bottom:24px;line-height:1.5;">Login untuk menyimpan playlist<br>dan lagu favorit kamu</p>
-        <!-- Google Sign-In Button container (untuk web) -->
-        <div id="googleSignInBtn" style="display:flex;justify-content:center;min-height:44px;margin-bottom:12px;"></div>
+        <button onclick="loginWithGoogle()" style="display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:white;color:#333;border:none;border-radius:8px;padding:12px 20px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:12px;">
+            <svg viewBox="0 0 48 48" style="width:22px;height:22px;flex-shrink:0;">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            Masuk dengan Google
+        </button>
         <button onclick="closeLoginModal()" style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);padding:10px 28px;border-radius:20px;font-size:13px;cursor:pointer;width:100%;">Nanti saja</button>
     </div>
 </div>
