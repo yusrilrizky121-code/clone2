@@ -688,10 +688,9 @@ async function downloadMusic() {
 
 
 // ===================== GOOGLE LOGIN =====================
-// Ganti CLIENT_ID di bawah dengan Client ID dari Google Cloud Console
-// Cara buat: https://console.cloud.google.com → APIs & Services → Credentials → Create OAuth 2.0 Client ID
-// Authorized JS origins: https://clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID'; // <-- GANTI INI
+// Di APK Android: pakai AccountManager (seperti Metrolist) — tanpa Google Console
+// Di Web: pakai Google GSI dengan Client ID
+const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
 
 function loginWithGoogle() {
     const user = getGoogleUser();
@@ -703,13 +702,73 @@ function loginWithGoogle() {
         }
         return;
     }
-    _showLoginModal();
+    // Cek apakah running di APK Android dengan AndroidBridge
+    if (window.AndroidBridge && window.AndroidBridge.isAndroid()) {
+        _showAndroidAccountPicker();
+    } else {
+        _showLoginModal();
+    }
 }
 
+// ---- ANDROID: Tampilkan picker akun Google dari HP ----
+function _showAndroidAccountPicker() {
+    try {
+        const accountsJson = window.AndroidBridge.getGoogleAccounts();
+        const accounts = JSON.parse(accountsJson);
+        if (accounts.length === 0) {
+            showToast('Tidak ada akun Google di HP ini');
+            return;
+        }
+        if (accounts.length === 1) {
+            // Langsung login jika hanya 1 akun
+            window.AndroidBridge.loginWithAccount(accounts[0].email);
+            return;
+        }
+        // Tampilkan modal pilih akun
+        _renderAccountPickerModal(accounts);
+    } catch(e) {
+        showToast('Gagal ambil akun Google');
+        console.error(e);
+    }
+}
+
+function _renderAccountPickerModal(accounts) {
+    // Buat modal pilih akun
+    let existing = document.getElementById('accountPickerModal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'accountPickerModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;align-items:flex-end;justify-content:center;';
+    let items = accounts.map(function(acc) {
+        return '<div onclick="_selectAccount(\'' + acc.email + '\')" style="display:flex;align-items:center;gap:14px;padding:16px 20px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.07);">' +
+            '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#1ed760,#17a84a);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#000;flex-shrink:0;">' + acc.email.charAt(0).toUpperCase() + '</div>' +
+            '<div><div style="color:white;font-size:15px;font-weight:600;">' + acc.displayName + '</div><div style="color:rgba(255,255,255,0.5);font-size:13px;">' + acc.email + '</div></div>' +
+            '</div>';
+    }).join('');
+    modal.innerHTML = '<div style="background:#1a1a2e;width:100%;border-radius:20px 20px 0 0;padding-bottom:24px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:20px 20px 12px;">' +
+        '<h3 style="color:white;font-size:17px;font-weight:700;margin:0;">Pilih Akun Google</h3>' +
+        '<div onclick="_closeAccountPicker()" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:white;font-size:16px;">✕</div>' +
+        '</div>' + items + '</div>';
+    document.body.appendChild(modal);
+}
+
+function _selectAccount(email) {
+    _closeAccountPicker();
+    if (window.AndroidBridge) {
+        window.AndroidBridge.loginWithAccount(email);
+    }
+}
+
+function _closeAccountPicker() {
+    const m = document.getElementById('accountPickerModal');
+    if (m) m.remove();
+}
+
+// ---- WEB: Tampilkan modal login Google GSI ----
 function _showLoginModal() {
     const modal = document.getElementById('loginModal');
     modal.style.display = 'flex';
-    // Coba render Google button jika GSI sudah load dan Client ID valid
     if (window.google && window.google.accounts && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
         try {
             google.accounts.id.initialize({
@@ -722,17 +781,11 @@ function _showLoginModal() {
             if (btnContainer) {
                 btnContainer.innerHTML = '';
                 google.accounts.id.renderButton(btnContainer, {
-                    theme: 'filled_blue',
-                    size: 'large',
-                    width: 280,
-                    text: 'signin_with',
-                    shape: 'rectangular',
-                    logo_alignment: 'left',
+                    theme: 'filled_blue', size: 'large', width: 280,
+                    text: 'signin_with', shape: 'rectangular',
                 });
             }
-        } catch(e) {
-            console.error('Google GSI error:', e);
-        }
+        } catch(e) { console.error('Google GSI error:', e); }
     }
 }
 
@@ -742,7 +795,6 @@ function closeLoginModal() {
 
 function handleGoogleLogin(response) {
     try {
-        // Decode JWT payload (base64url decode)
         const parts = response.credential.split('.');
         const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
         const user = {
@@ -757,7 +809,6 @@ function handleGoogleLogin(response) {
         showToast('Selamat datang, ' + user.name.split(' ')[0] + '!');
     } catch(e) {
         showToast('Login gagal, coba lagi');
-        console.error('Login error:', e);
     }
 }
 

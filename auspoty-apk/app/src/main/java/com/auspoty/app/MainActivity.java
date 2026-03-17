@@ -1,8 +1,10 @@
 package com.auspoty.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,6 +18,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 public class MainActivity extends AppCompatActivity {
@@ -25,6 +29,7 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progressBar;
     private Handler keepAliveHandler;
     private Runnable keepAliveRunnable;
+    private static final int REQ_ACCOUNTS = 101;
 
     private static final String APP_URL = "file:///android_asset/index.html";
     private static final String API_HOST = "clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app";
@@ -51,6 +56,9 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setUserAgentString(settings.getUserAgentString() + " AuspotyApp/1.0");
+
+        // Daftarkan Android Bridge untuk login Google via AccountManager
+        webView.addJavascriptInterface(new GoogleLoginBridge(this, webView), "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -128,6 +136,14 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         webView.onResume();
         webView.resumeTimers();
+        // Minta permission GET_ACCOUNTS untuk login Google via AccountManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.GET_ACCOUNTS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.GET_ACCOUNTS}, REQ_ACCOUNTS);
+            }
+        }
         // Start foreground service supaya musik tetap jalan di background
         Intent serviceIntent = new Intent(this, MusicService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
