@@ -205,6 +205,8 @@ public class MainActivity extends AppCompatActivity {
         };
     }
 
+    private long lastBackPressTime = 0;
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -227,8 +229,21 @@ public class MainActivity extends AppCompatActivity {
                     if (result != null && result.contains("navigated")) {
                         // sudah navigasi ke home, jangan keluar
                     } else {
-                        // Sudah di home — minimize app ke background, JANGAN exit
-                        runOnUiThread(() -> moveTaskToBack(true));
+                        // Sudah di home — double back to exit
+                        long now = System.currentTimeMillis();
+                        if (now - lastBackPressTime < 2000) {
+                            // Tekan back 2x dalam 2 detik → minimize
+                            moveTaskToBack(true);
+                        } else {
+                            lastBackPressTime = now;
+                            runOnUiThread(() ->
+                                android.widget.Toast.makeText(
+                                    MainActivity.this,
+                                    "Tekan sekali lagi untuk keluar",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            );
+                        }
                     }
                 }
             );
