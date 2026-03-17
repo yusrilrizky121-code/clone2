@@ -62,99 +62,30 @@ body.light-mode { --bg-base:#f5f5f5; --bg-highlight:#e8e8e8; --bg-card:#ffffff; 
 .category-card:active { opacity:.7; }
 .category-title { font-size:14px; font-weight:700; color:white; }
 
-/* SETTINGS - Apple Music Style */
-.settings-header {
-    padding: 52px 20px 8px;
-    position: sticky; top: 0; z-index: 50;
-    background: rgba(18,18,18,0.82);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-}
-.settings-header h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
-
-.settings-profile-card {
-    margin: 12px 16px 4px;
-    background: linear-gradient(145deg, #1c1c1e, #2c2c2e);
-    border-radius: 18px;
-    padding: 20px 18px;
-    display: flex; align-items: center; gap: 16px;
-    cursor: pointer;
-    transition: transform .15s, opacity .15s;
-    border: 1px solid rgba(255,255,255,.06);
-}
-.settings-profile-card:active { transform: scale(.97); opacity: .85; }
-
-.settings-avatar {
-    width: 62px; height: 62px; border-radius: 50%;
-    background: linear-gradient(135deg, #fc3c44, #ff6b6b);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 26px; font-weight: 800; color: #fff;
-    flex-shrink: 0;
-    box-shadow: 0 4px 16px rgba(252,60,68,.4);
-    overflow: hidden;
-}
-.settings-profile-info { flex: 1; min-width: 0; }
-.settings-profile-name { font-size: 17px; font-weight: 700; color: var(--text-main); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.settings-profile-sub { font-size: 13px; color: #fc3c44; font-weight: 600; }
-
-.settings-group-label {
-    font-size: 12px; font-weight: 600;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    color: rgba(235,235,245,.5);
-    padding: 22px 20px 6px;
-}
-
-.settings-group {
-    margin: 0 16px;
-    background: #1c1c1e;
-    border-radius: 14px;
-    overflow: hidden;
-    border: 1px solid rgba(255,255,255,.05);
-}
-
-.settings-item {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(255,255,255,.06);
-    cursor: pointer;
-    transition: background .12s;
-    min-height: 52px;
-}
-.settings-item:last-child { border-bottom: none; }
-.settings-item:active { background: rgba(255,255,255,.06); }
-.settings-item-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
-
-.settings-icon {
-    width: 32px; height: 32px;
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-}
-.settings-icon svg { fill: white; width: 18px; height: 18px; }
-
-.settings-item-title { font-size: 15px; font-weight: 400; color: var(--text-main); margin-bottom: 1px; }
-.settings-item-sub { font-size: 12px; color: rgba(235,235,245,.5); }
-
-.settings-chevron { fill: rgba(235,235,245,.3); width: 18px; height: 18px; flex-shrink: 0; }
-
-.settings-toggle {
-    width: 50px; height: 30px;
-    border-radius: 15px;
-    background: rgba(120,120,128,.32);
-    position: relative; cursor: pointer;
-    transition: background .25s;
-    flex-shrink: 0;
-}
-.settings-toggle.active { background: #34c759; }
-.toggle-thumb {
-    position: absolute; top: 3px; left: 3px;
-    width: 24px; height: 24px;
-    border-radius: 50%; background: white;
-    box-shadow: 0 2px 6px rgba(0,0,0,.35);
-    transition: transform .25s cubic-bezier(.4,0,.2,1);
-}
-.settings-toggle.active .toggle-thumb { transform: translateX(20px); }
+/* SETTINGS */
+.settings-header { padding:40px 16px 16px; position:sticky; top:0; background:var(--bg-base); z-index:50; }
+.settings-header h1 { font-size:24px; font-weight:700; }
+.settings-profile-card { margin:0 16px 8px; background:var(--bg-card); border-radius:12px; padding:16px; display:flex; align-items:center; gap:14px; cursor:pointer; transition:opacity .15s; }
+.settings-profile-card:active { opacity:.7; }
+.settings-avatar { width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,var(--spotify-green),var(--spotify-green-dark)); display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; color:#000; flex-shrink:0; overflow:hidden; }
+.settings-profile-info { flex:1; }
+.settings-profile-name { font-size:16px; font-weight:700; color:var(--text-main); margin-bottom:2px; }
+.settings-profile-sub { font-size:13px; color:var(--spotify-green); font-weight:600; }
+.settings-group-label { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-sub); padding:20px 16px 8px; }
+.settings-group { margin:0 16px; background:var(--bg-card); border-radius:12px; overflow:hidden; }
+.settings-item { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.05); cursor:pointer; transition:background .15s; }
+.settings-item:last-child { border-bottom:none; }
+.settings-item:active { background:rgba(255,255,255,.05); }
+.settings-item-left { display:flex; align-items:center; gap:14px; flex:1; }
+.settings-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.settings-icon svg { fill:white; width:20px; height:20px; }
+.settings-item-title { font-size:15px; font-weight:500; color:var(--text-main); margin-bottom:2px; }
+.settings-item-sub { font-size:12px; color:var(--text-sub); }
+.settings-chevron { fill:var(--text-sub); width:20px; height:20px; flex-shrink:0; }
+.settings-toggle { width:48px; height:28px; border-radius:14px; background:rgba(255,255,255,.2); position:relative; cursor:pointer; transition:background .25s; flex-shrink:0; }
+.settings-toggle.active { background:var(--spotify-green); }
+.toggle-thumb { position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:white; box-shadow:0 1px 4px rgba(0,0,0,.3); transition:transform .25s; }
+.settings-toggle.active .toggle-thumb { transform:translateX(20px); }
 
 /* Toggle switch */
 
