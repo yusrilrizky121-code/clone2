@@ -424,8 +424,6 @@ function applyUILanguage() {
     if (pills[1]) pills[1].innerText = t.homePillMusic;
     if (pills[2]) pills[2].innerText = t.homePillPodcast;
 }
-;
-}
 const HOME_QUERIES = [
     { id: 'rowAnyar',   query: 'lagu indonesia terbaru 2025' },
     { id: 'rowGembira', query: 'lagu semangat gembira indonesia' },
