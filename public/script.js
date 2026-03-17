@@ -617,21 +617,23 @@ function openRegionPicker() {
 
 // EDIT PROFILE
 function openEditProfile() {
-    const s = getSettings();
-    const user = getGoogleUser();
-    document.getElementById('editProfileName').value = s.profileName || (user ? user.name : '');
-    const av = document.getElementById('editProfileAvatar');
-    const customPhoto = localStorage.getItem('auspotyCustomPhoto');
+    var s = getSettings();
+    var user = getGoogleUser();
+    var nameInput = document.getElementById('editProfileName');
+    if (nameInput) nameInput.value = s.profileName || (user ? user.name : '');
+    var av = document.getElementById('editProfileAvatar');
+    var customPhoto = localStorage.getItem('auspotyCustomPhoto');
     if (av) {
-        if (customPhoto) {
-            av.innerHTML = '<img src="' + customPhoto + '" style="width:100%;height:100%;object-fit:cover;">';
-        } else if (user && user.picture) {
-            av.innerHTML = '<img src="' + user.picture + '" style="width:100%;height:100%;object-fit:cover;">';
+        var photoSrc = customPhoto || (user ? user.picture : null);
+        if (photoSrc) {
+            av.innerHTML = '<img src="' + photoSrc + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
         } else {
+            av.innerHTML = '';
             av.innerText = (s.profileName || 'A').charAt(0).toUpperCase();
         }
     }
-    document.getElementById('editProfileModal').style.display = 'flex';
+    var modal = document.getElementById('editProfileModal');
+    if (modal) { modal.style.display = 'flex'; }
 }
 function closeEditProfile() { document.getElementById('editProfileModal').style.display = 'none'; }
 function saveProfile() {
@@ -644,14 +646,14 @@ function saveProfile() {
 }
 
 function previewProfilePhoto(event) {
-    const file = event.target.files[0];
+    var file = event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
+    var reader = new FileReader();
     reader.onload = function(e) {
-        const dataUrl = e.target.result;
+        var dataUrl = e.target.result;
         localStorage.setItem('auspotyCustomPhoto', dataUrl);
-        const av = document.getElementById('editProfileAvatar');
-        if (av) av.innerHTML = '<img src="' + dataUrl + '" style="width:100%;height:100%;object-fit:cover;">';
+        var av = document.getElementById('editProfileAvatar');
+        if (av) av.innerHTML = '<img src="' + dataUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
         updateProfileUI();
         showToast('Foto profil diperbarui!');
     };
