@@ -11,97 +11,69 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/174/174872.png">
     <link rel="stylesheet" href="/style.css">
     <script src="https://www.youtube.com/iframe_api"></script>
-    <!-- Firebase Auth SDK -->
-    <script type="module">
-      import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-      import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
-        from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    <!-- Google Login via OAuth -->
+    <script>
+      // Google OAuth - tidak butuh domain whitelist
+      const GOOGLE_CLIENT_ID = '377647678643-auto'; // placeholder, pakai token approach
 
-      // =====================================================
-      // GANTI CONFIG INI dengan config dari Firebase Console
-      // console.firebase.google.com → Project Settings → Your apps → Web
-      // =====================================================
-      const firebaseConfig = {
-        apiKey: "AIzaSyD2Wd6l-T1mqJn4brLPxfoGMzThN0J_qlY",
-        authDomain: "auspoty.firebaseapp.com",
-        projectId: "auspoty",
-        storageBucket: "auspoty.firebasestorage.app",
-        messagingSenderId: "377647678643",
-        appId: "1:377647678643:web:9405003aa68286b2495cc6",
-        measurementId: "G-WRQDN0ZSYP"
+      window._firebaseSignIn = function() {
+        // Pakai Google Identity Services (GSI) - works di semua domain
+        if (typeof google !== 'undefined' && google.accounts) {
+          google.accounts.id.prompt();
+        } else {
+          // Fallback: buka Google OAuth manual
+          const clientId = '377647678643';
+          const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+          const scope = encodeURIComponent('openid email profile');
+          const state = Math.random().toString(36).substring(2);
+          localStorage.setItem('oauth_state', state);
+          // Simpan URL asal untuk redirect balik
+          localStorage.setItem('oauth_return', window.location.href);
+          window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + clientId +
+            '&redirect_uri=' + redirectUri +
+            '&response_type=token' +
+            '&scope=' + scope +
+            '&state=' + state;
+        }
       };
 
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const provider = new GoogleAuthProvider();
+      window._firebaseSignOut = function() {
+        localStorage.removeItem('auspotyGoogleUser');
+        if (typeof updateProfileUI === 'function') updateProfileUI();
+        if (typeof showToast === 'function') showToast('Berhasil keluar');
+      };
 
-      // Expose ke window supaya bisa dipanggil dari script.js
-      window._firebaseAuth = auth;
-      window._firebaseProvider = provider;
-      window._firebaseSignIn = async function() {
-        try {
-          // Cek apakah mobile browser
-          const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-          if (isMobile) {
-            // Mobile: pakai redirect (lebih kompatibel)
-            await signInWithRedirect(auth, provider);
-          } else {
-            // Desktop: pakai popup
-            const result = await signInWithPopup(auth, provider);
-            const user = result.user;
-            const userData = {
-              name: user.displayName || 'Pengguna Google',
-              email: user.email || '',
-              picture: user.photoURL || '',
-              sub: user.uid || '',
-            };
-            localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
-            if (typeof updateProfileUI === 'function') updateProfileUI();
-            if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
-            const modal = document.getElementById('loginModal');
-            if (modal) modal.style.display = 'none';
+      // Cek hash fragment dari OAuth redirect
+      (function checkOAuthCallback() {
+        const hash = window.location.hash;
+        if (hash && hash.includes('access_token')) {
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get('access_token');
+          if (accessToken) {
+            // Ambil info user dari Google
+            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { 'Authorization': 'Bearer ' + accessToken }
+            }).then(r => r.json()).then(user => {
+              const userData = {
+                name: user.name || 'Pengguna Google',
+                email: user.email || '',
+                picture: user.picture || '',
+                sub: user.sub || '',
+              };
+              localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+              // Bersihkan hash dari URL
+              history.replaceState(null, '', window.location.pathname);
+              if (typeof updateProfileUI === 'function') updateProfileUI();
+              if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+            }).catch(e => console.error('Gagal ambil info user:', e));
           }
-        } catch(e) {
-          console.error('Firebase login error:', e);
-          if (typeof showToast === 'function') showToast('Login gagal: ' + (e.message || 'coba lagi'));
         }
-      };
-      window._firebaseSignOut = async function() {
-        try {
-          await signOut(auth);
-          localStorage.removeItem('auspotyGoogleUser');
-          if (typeof updateProfileUI === 'function') updateProfileUI();
-          if (typeof showToast === 'function') showToast('Berhasil keluar');
-        } catch(e) {}
-      };
-      // Cek status login saat load + tangkap hasil redirect
-      getRedirectResult(auth).then((result) => {
-        if (result && result.user) {
-          const user = result.user;
-          const userData = {
-            name: user.displayName || 'Pengguna Google',
-            email: user.email || '',
-            picture: user.photoURL || '',
-            sub: user.uid || '',
-          };
-          localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
-          if (typeof updateProfileUI === 'function') updateProfileUI();
-          if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+        // Restore user dari localStorage
+        const saved = localStorage.getItem('auspotyGoogleUser');
+        if (saved && typeof updateProfileUI === 'function') {
+          setTimeout(updateProfileUI, 100);
         }
-      }).catch((e) => { console.error('Redirect result error:', e); });
-
-      onAuthStateChanged(auth, (user) => {
-        if (user) {
-          const userData = {
-            name: user.displayName || 'Pengguna Google',
-            email: user.email || '',
-            picture: user.photoURL || '',
-            sub: user.uid || '',
-          };
-          localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
-          if (typeof updateProfileUI === 'function') updateProfileUI();
-        }
-      });
+      })();
     </script>
 </head>
 <body>
