@@ -1,6 +1,8 @@
 {
   "version": 2,
   "functions": {
+    "api/search.py": { "maxDuration": 30 },
+    "api/lyrics.py": { "maxDuration": 30 },
     "api/download.py": { "maxDuration": 60 }
   },
   "routes": [
