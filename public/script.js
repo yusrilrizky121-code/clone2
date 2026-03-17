@@ -20,6 +20,15 @@ dbReq.onupgradeneeded = (e) => {
 dbReq.onsuccess = (e) => { db = e.target.result; renderLibraryUI(); };
 
 // YOUTUBE PLAYER
+
+// API FETCH - fallback ke deployment aktif jika relative URL gagal
+async function apiFetch(path) {
+    try {
+        const r = await fetch(path);
+        if (r.ok) return r;
+    } catch(e) {}
+    return fetch('https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app' + path);
+}
 let ytPlayer, isPlaying = false, currentTrack = null, progressInterval;
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', { height: '0', width: '0', events: { onReady: () => {}, onStateChange: onPlayerStateChange } });
@@ -272,57 +281,23 @@ const HOME_QUERIES_BY_LANG = {
         { id: 'rowHits',    query: 'kpop trending today' },
     ],
 };
-
-const HOME_QUERIES_BY_REGION = {
-    Indonesia: null,
-    Global: [
-        { id: 'rowAnyar',   query: 'top global songs 2025' },
-        { id: 'rowGembira', query: 'happy pop songs 2025' },
-        { id: 'rowCharts',  query: 'billboard hot 100 2025' },
-        { id: 'rowGalau',   query: 'sad songs 2025' },
-        { id: 'rowTiktok',  query: 'viral tiktok global 2025' },
-        { id: 'rowHits',    query: 'trending songs worldwide 2025' },
-    ],
-    'Amerika Serikat': [
-        { id: 'rowAnyar',   query: 'new american songs 2025' },
-        { id: 'rowGembira', query: 'upbeat american pop 2025' },
-        { id: 'rowCharts',  query: 'us top charts 2025' },
-        { id: 'rowGalau',   query: 'sad american songs 2025' },
-        { id: 'rowTiktok',  query: 'viral tiktok usa 2025' },
-        { id: 'rowHits',    query: 'us trending songs today' },
-    ],
-    Jepang: [
-        { id: 'rowAnyar',   query: 'japanese new songs 2025' },
-        { id: 'rowGembira', query: 'japanese happy songs 2025' },
-        { id: 'rowCharts',  query: 'japan oricon chart 2025' },
-        { id: 'rowGalau',   query: 'japanese sad songs 2025' },
-        { id: 'rowTiktok',  query: 'japan viral tiktok 2025' },
-        { id: 'rowHits',    query: 'japanese trending today' },
-    ],
-    Korea: [
-        { id: 'rowAnyar',   query: 'kpop new songs 2025' },
-        { id: 'rowGembira', query: 'kpop happy songs 2025' },
-        { id: 'rowCharts',  query: 'kpop melon chart 2025' },
-        { id: 'rowGalau',   query: 'kpop sad songs 2025' },
-        { id: 'rowTiktok',  query: 'kpop viral tiktok 2025' },
-        { id: 'rowHits',    query: 'kpop trending today' },
-    ],
-};
 const SECTION_TITLES_BY_LANG = {
     Indonesia: ['Sering kamu dengarkan','Rilis Anyar','Gembira & Semangat','Tangga Lagu Populer','Galau Terpopuler','Viral TikTok','Artis Terpopuler','Hit Hari Ini'],
     English:   ['Recently Played','New Releases','Happy & Energetic','Top Charts','Sad Songs','Viral TikTok','Popular Artists','Hits Today'],
-    Japanese:  ['最近再生','新着リリース','元気な曲','人気チャート','悲しい曲','バイラルTikTok','人気アーティスト','今日のヒット'],
-    Korean:    ['최근 재생','신규 발매','신나는 노래','인기 차트','슬픈 노래','바이럴 틱톡','인기 아티스트','오늘의 히트'],
+    Japanese:  ['µ£ÇΦ┐æσåìτöƒ','µû░τ¥Çπâ¬πâ¬πâ╝πé╣','σàâµ░ùπü¬µ¢▓','Σ║║µ░ùπâüπâúπâ╝πâê','µé▓πüùπüäµ¢▓','πâÉπéñπâ⌐πâ½TikTok','Σ║║µ░ùπéóπâ╝πâåπéúπé╣πâê','Σ╗èµùÑπü«πâÆπââπâê'],
+    Korean:    ['∞╡£Ω╖╝ ∞₧¼∞â¥','∞ïáΩ╖£ δ░£δºñ','∞ïáδéÿδèö δà╕δ₧ÿ','∞¥╕Ω╕░ ∞░¿φè╕','∞è¼φöê δà╕δ₧ÿ','δ░ö∞¥┤δƒ┤ φï▒φåí','∞¥╕Ω╕░ ∞òäφï░∞èñφè╕','∞ÿñδèÿ∞¥ÿ φ₧êφè╕'],
 };
 function getHomeQueries() {
     const s = getSettings();
     const region = s.region || 'Indonesia';
     const lang = s.language || 'Indonesia';
-    // Region override dulu, kalau ada
-    if (HOME_QUERIES_BY_REGION && HOME_QUERIES_BY_REGION[region]) {
+    if (typeof HOME_QUERIES_BY_REGION !== 'undefined' && HOME_QUERIES_BY_REGION[region]) {
         return HOME_QUERIES_BY_REGION[region];
     }
-    return HOME_QUERIES_BY_LANG[lang] || HOME_QUERIES_BY_LANG.Indonesia;
+    if (typeof HOME_QUERIES_BY_LANG !== 'undefined') {
+        return HOME_QUERIES_BY_LANG[lang] || HOME_QUERIES_BY_LANG.Indonesia;
+    }
+    return HOME_QUERIES;
 }
 function applyLanguageTitles() {
     const lang = getSettings().language || 'Indonesia';
@@ -330,99 +305,6 @@ function applyLanguageTitles() {
     const titleEls = document.querySelectorAll('.section-title');
     const titleMap = ['Sering','Rilis','Gembira','Tangga','Galau','Viral','Artis','Hit'];
     titleEls.forEach((el, i) => { if (titles[i]) el.innerText = titles[i]; });
-}
-
-function applyUILanguage() {
-    const lang = getSettings().language || 'Indonesia';
-    const t = UI_STRINGS[lang] || UI_STRINGS.Indonesia;
-    function setText(id, val) { const el = document.getElementById(id); if (el) el.innerText = val; }
-    function setAttr(id, attr, val) { const el = document.getElementById(id); if (el) el.setAttribute(attr, val); }
-    function setQueryAll(sel, val) { document.querySelectorAll(sel).forEach(el => { if (el.innerText.trim()) el.innerText = val; }); }
-
-    // Nav items
-    const navItems = document.querySelectorAll('.nav-item');
-    if (navItems[0]) navItems[0].childNodes[navItems[0].childNodes.length-1].textContent = t.navHome;
-    if (navItems[1]) navItems[1].childNodes[navItems[1].childNodes.length-1].textContent = t.navSearch;
-    if (navItems[2]) navItems[2].childNodes[navItems[2].childNodes.length-1].textContent = t.navLibrary;
-    if (navItems[3]) navItems[3].childNodes[navItems[3].childNodes.length-1].textContent = t.navSettings;
-
-    // Search
-    setAttr('searchInput', 'placeholder', t.searchPlaceholder);
-    const searchH1 = document.querySelector('#view-search .search-header-container h1');
-    if (searchH1) searchH1.innerText = t.searchTitle;
-    const browseTitle = document.querySelector('#searchCategoriesUI .section-title');
-    if (browseTitle) browseTitle.innerText = t.searchBrowse;
-
-    // Library
-    const libTitle = document.querySelector('.lib-title');
-    if (libTitle) libTitle.innerText = t.libTitle;
-
-    // Settings header
-    const settH1 = document.querySelector('#view-settings .settings-header h1');
-    if (settH1) settH1.innerText = t.settingsTitle;
-
-    // Settings group labels
-    const groupLabels = document.querySelectorAll('.settings-group-label');
-    const labelKeys = ['settingsDisplay','settingsLangRegion','settingsPlayback','settingsNotif','settingsStorage','settingsAbout'];
-    groupLabels.forEach((el, i) => { if (labelKeys[i] && t[labelKeys[i]]) el.innerText = t[labelKeys[i]]; });
-
-    // Settings item titles (by order in settings groups)
-    const allSettingsTitles = document.querySelectorAll('.settings-item-title');
-    const titleMap = [
-        null, // login/logout - skip
-        null,
-        t.settingsTheme,
-        t.settingsDark,
-        t.settingsQuality,
-        t.settingsFontSize,
-        t.settingsLang,
-        t.settingsRegion,
-        t.settingsAutoplay,
-        t.settingsCrossfade,
-        t.settingsNormalize,
-        t.settingsLyricsSync,
-        t.settingsNotifSong,
-        t.settingsNotifRelease,
-        t.settingsClearCache,
-        t.settingsClearLiked,
-        t.settingsDeveloper,
-        t.settingsVersion,
-    ];
-    // Lebih aman: cari by ID atau data attribute
-    // Gunakan querySelector dengan text matching
-    const settingsItemMap = {
-        'Tema Warna': t.settingsTheme, 'Color Theme': t.settingsTheme, 'カラーテーマ': t.settingsTheme, '색상 테마': t.settingsTheme,
-        'Mode Gelap': t.settingsDark, 'Dark Mode': t.settingsDark, 'ダークモード': t.settingsDark, '다크 모드': t.settingsDark,
-        'Kualitas Audio': t.settingsQuality, 'Audio Quality': t.settingsQuality, '音質': t.settingsQuality, '음질': t.settingsQuality,
-        'Ukuran Teks': t.settingsFontSize, 'Text Size': t.settingsFontSize, '文字サイズ': t.settingsFontSize, '텍스트 크기': t.settingsFontSize,
-        'Bahasa Aplikasi': t.settingsLang, 'App Language': t.settingsLang, 'アプリの言語': t.settingsLang, '앱 언어': t.settingsLang,
-        'Wilayah Konten': t.settingsRegion, 'Content Region': t.settingsRegion, 'コンテンツ地域': t.settingsRegion, '콘텐츠 지역': t.settingsRegion,
-        'Putar Otomatis': t.settingsAutoplay, 'Autoplay': t.settingsAutoplay, '自動再生': t.settingsAutoplay, '자동 재생': t.settingsAutoplay,
-        'Crossfade': t.settingsCrossfade, 'クロスフェード': t.settingsCrossfade, '크로스페이드': t.settingsCrossfade,
-        'Normalisasi Volume': t.settingsNormalize, 'Volume Normalization': t.settingsNormalize, '音量正規化': t.settingsNormalize, '볼륨 정규화': t.settingsNormalize,
-        'Sinkronisasi Lirik': t.settingsLyricsSync, 'Lyrics Sync': t.settingsLyricsSync, '歌詞同期': t.settingsLyricsSync, '가사 동기화': t.settingsLyricsSync,
-        'Notifikasi Lagu': t.settingsNotifSong, 'Now Playing Notification': t.settingsNotifSong, '再生中の通知': t.settingsNotifSong, '재생 중 알림': t.settingsNotifSong,
-        'Rilis Baru': t.settingsNotifRelease, 'New Releases': t.settingsNotifRelease, '新着リリース': t.settingsNotifRelease, '새 릴리스': t.settingsNotifRelease,
-        'Hapus Cache': t.settingsClearCache, 'Clear Cache': t.settingsClearCache, 'キャッシュを削除': t.settingsClearCache, '캐시 지우기': t.settingsClearCache,
-        'Hapus Lagu Disukai': t.settingsClearLiked, 'Clear Liked Songs': t.settingsClearLiked, 'お気に入りを削除': t.settingsClearLiked, '좋아요 삭제': t.settingsClearLiked,
-        'Developer': t.settingsDeveloper,
-        'Versi Aplikasi': t.settingsVersion, 'App Version': t.settingsVersion, 'アプリバージョン': t.settingsVersion, '앱 버전': t.settingsVersion,
-        'Masuk dengan Google': t.loginGoogle, 'Sign in with Google': t.loginGoogle, 'Googleでサインイン': t.loginGoogle, 'Google로 로그인': t.loginGoogle,
-    };
-    document.querySelectorAll('.settings-item-title').forEach(el => {
-        const txt = el.innerText.trim();
-        if (settingsItemMap[txt]) el.innerText = settingsItemMap[txt];
-    });
-
-    // Login/logout sub text
-    setText('googleLoginText', t.loginGoogle);
-    setText('googleLoginSub', t.loginSub);
-
-    // Home pills
-    const pills = document.querySelectorAll('#view-home .pill');
-    if (pills[0]) pills[0].innerText = t.homePillAll;
-    if (pills[1]) pills[1].innerText = t.homePillMusic;
-    if (pills[2]) pills[2].innerText = t.homePillPodcast;
 }
 const HOME_QUERIES = [
     { id: 'rowAnyar',   query: 'lagu indonesia terbaru 2025' },
@@ -447,7 +329,6 @@ async function loadHomeData() {
     const artistEl = document.getElementById('rowArtists');
     if (artistEl) artistEl.innerHTML = ARTISTS.map(renderArtistCard).join('');
     applyLanguageTitles();
-    applyUILanguage();
     for (const row of getHomeQueries()) {
         const el = document.getElementById(row.id);
         if (!el) continue;
@@ -590,11 +471,11 @@ function renderLibraryUI() {
         let html = '';
         html += '<div class="lib-item" onclick="openLikedSongs()">'+
             '<div class="lib-item-img liked"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>'+
-            '<div class="lib-item-info"><div class="lib-item-title">Lagu yang Disukai</div><div class="lib-item-sub">Playlist · ' + liked.length + ' lagu</div></div></div>';
+            '<div class="lib-item-info"><div class="lib-item-title">Lagu yang Disukai</div><div class="lib-item-sub">Playlist ┬╖ ' + liked.length + ' lagu</div></div></div>';
         playlists.forEach(pl => {
             html += '<div class="lib-item" onclick="openPlaylist(\'' + pl.id + '\')">'+
                 '<img class="lib-item-img" src="' + (pl.img || 'https://via.placeholder.com/64x64?text=music') + '" style="border-radius:4px;">'+
-                '<div class="lib-item-info"><div class="lib-item-title">' + pl.name + '</div><div class="lib-item-sub">Playlist · ' + (pl.tracks ? pl.tracks.length : 0) + ' lagu</div></div></div>';
+                '<div class="lib-item-info"><div class="lib-item-title">' + pl.name + '</div><div class="lib-item-sub">Playlist ┬╖ ' + (pl.tracks ? pl.tracks.length : 0) + ' lagu</div></div></div>';
         });
         container.innerHTML = html;
     };
@@ -699,7 +580,7 @@ function applyAllSettings() {
     if (s.darkMode === false) document.body.classList.add('light-mode');
     else document.body.classList.remove('light-mode');
 
-    // Tema warna — update --accent, --accent2, --spotify-green sekaligus
+    // Tema warna ΓÇö update --accent, --accent2, --spotify-green sekaligus
     const themes = {
         green:  { a: '#a78bfa', b: '#f472b6', g: '#a78bfa' },
         blue:   { a: '#38bdf8', b: '#818cf8', g: '#38bdf8' },
@@ -734,7 +615,6 @@ function applyAllSettings() {
     const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = s.profileName || 'Pengguna Auspoty';
     const pav = document.getElementById('settingsAvatar'); if (pav && !pav.querySelector('img')) pav.innerText = (s.profileName || 'A').charAt(0).toUpperCase();
     estimateCacheSize();
-    applyUILanguage();
 }
 function setToggle(id, active) {
     const el = document.getElementById(id); if (!el) return;
@@ -888,18 +768,6 @@ function clearLikedSongs() {
 // REPEAT & PREV/NEXT
 let isRepeat = false;
 let songHistory = [];
-// API FETCH dengan fallback ke deployment aktif
-async function apiFetch(path) {
-    const FALLBACK = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
-    try {
-        const r = await fetch(path);
-        if (r.ok) return r;
-        throw new Error('not ok');
-    } catch(e) {
-        return fetch(FALLBACK + path);
-    }
-}
-
 function toggleRepeat() {
     isRepeat = !isRepeat;
     const btn = document.getElementById('repeatBtn');
@@ -918,7 +786,7 @@ function playNextSong() { playNextSimilarSong(); }
 function openCommentsModal() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
     document.getElementById('commentsModal').style.display = 'flex';
-    document.getElementById('commentTrackName').innerText = currentTrack.title + ' — ' + currentTrack.artist;
+    document.getElementById('commentTrackName').innerText = currentTrack.title + ' ΓÇö ' + currentTrack.artist;
     const user = getGoogleUser();
     document.getElementById('commentInputArea').style.display = user ? 'block' : 'none';
     document.getElementById('commentLoginPrompt').style.display = user ? 'none' : 'block';
