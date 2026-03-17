@@ -330,6 +330,7 @@ function applyLanguageTitles() {
     const titleEls = document.querySelectorAll('.section-title');
     const titleMap = ['Sering','Rilis','Gembira','Tangga','Galau','Viral','Artis','Hit'];
     titleEls.forEach((el, i) => { if (titles[i]) el.innerText = titles[i]; });
+}
 
 function applyUILanguage() {
     const lang = getSettings().language || 'Indonesia';
