@@ -129,7 +129,9 @@ body.light-mode { --bg-base:#f5f5f5; --bg-highlight:#e8e8e8; --bg-card:#ffffff; 
 /* LYRICS */
 .lyrics-bg { position:absolute; inset:0; z-index:1; filter:blur(50px) brightness(.28) saturate(1.6); background-size:cover; background-position:center; transform:scale(1.3); }
 .lyrics-wrap { position:relative; z-index:2; display:flex; flex-direction:column; height:100%; }
-.lyrics-header { display:flex; justify-content:space-between; align-items:center; padding:56px 24px 16px; }
+.lyrics-header { display:flex; justify-content:space-between; align-items:center; padding:52px 16px 12px; }
+.lyrics-back-btn { display:flex; align-items:center; gap:6px; cursor:pointer; background:rgba(255,255,255,0.12); border-radius:20px; padding:8px 14px 8px 10px; color:white; font-size:13px; font-weight:600; min-width:80px; }
+.lyrics-back-btn:active { opacity:0.7; }
 .lyrics-label { font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-sub); }
 .lyric-actions { display:flex; gap:14px; align-items:center; }
 .lyric-btn { fill:var(--text-sub); width:24px; height:24px; cursor:pointer; }
