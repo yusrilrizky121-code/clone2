@@ -159,6 +159,13 @@ public class MainActivity extends AppCompatActivity {
 
         webView.loadUrl(APP_URL);
 
+        // Cegah WebView di-throttle saat background
+        webView.setKeepScreenOn(false); // jangan paksa layar nyala, tapi...
+        // ...pastikan rendering tetap aktif
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            webView.getSettings().setOffscreenPreRaster(true);
+        }
+
         // WakeLock untuk WebView — cegah CPU sleep saat musik background
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         if (pm != null) {
@@ -169,15 +176,31 @@ public class MainActivity extends AppCompatActivity {
             webViewWakeLock.setReferenceCounted(false);
         }
 
-        // Keep-alive: ping WebView setiap 5 detik supaya tidak di-throttle saat background
+        // Keep-alive: ping WebView setiap 1 detik supaya tidak di-throttle saat background
         keepAliveHandler = new Handler();
         keepAliveRunnable = new Runnable() {
             @Override
             public void run() {
                 if (webView != null) {
-                    webView.evaluateJavascript("(function(){ return typeof ytPlayer !== 'undefined' ? 1 : 0; })()", null);
+                    // Cek state player dan trigger next song jika ended
+                    webView.evaluateJavascript(
+                        "(function(){" +
+                        "  if(typeof ytPlayer!=='undefined'&&ytPlayer&&typeof ytPlayer.getPlayerState==='function'){" +
+                        "    var s=ytPlayer.getPlayerState();" +
+                        "    if(s===0){" + // ENDED
+                        "      if(typeof isRepeat!=='undefined'&&isRepeat){ytPlayer.seekTo(0);ytPlayer.playVideo();}" +
+                        "      else if(typeof playNextSimilarSong==='function'){playNextSimilarSong();}" +
+                        "    } else if(s===2&&typeof isPlaying!=='undefined'&&isPlaying){" + // PAUSED tapi harusnya playing
+                        "      ytPlayer.playVideo();" +
+                        "    }" +
+                        "  }" +
+                        "  if(typeof _bgAudioCtx!=='undefined'&&_bgAudioCtx&&_bgAudioCtx.state==='suspended'){" +
+                        "    _bgAudioCtx.resume();" +
+                        "  }" +
+                        "  return 1;" +
+                        "})()", null);
                 }
-                keepAliveHandler.postDelayed(this, 5000);
+                keepAliveHandler.postDelayed(this, 1000);
             }
         };
     }
@@ -228,6 +251,15 @@ public class MainActivity extends AppCompatActivity {
         }
         // Mulai keep-alive
         keepAliveHandler.post(keepAliveRunnable);
+        // Resume AudioContext dan player jika perlu
+        webView.evaluateJavascript(
+            "(function(){" +
+            "  if(typeof _bgAudioCtx!=='undefined'&&_bgAudioCtx&&_bgAudioCtx.state==='suspended'){_bgAudioCtx.resume();}" +
+            "  if(typeof ytPlayer!=='undefined'&&ytPlayer&&typeof ytPlayer.getPlayerState==='function'){" +
+            "    var s=ytPlayer.getPlayerState();" +
+            "    if(s===2&&typeof isPlaying!=='undefined'&&isPlaying){ytPlayer.playVideo();}" +
+            "  }" +
+            "})()", null);
     }
 
     @Override
