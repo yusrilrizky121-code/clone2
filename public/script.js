@@ -428,8 +428,13 @@ window.addEventListener('popstate', function(e) {
         // Di view utama — double back to exit
         var now = Date.now();
         if (now - _lastBackTime < 2000) {
-            // Tekan 2x dalam 2 detik — keluar dari app
-            return; // biarkan browser/WebView keluar
+            // Tekan 2x dalam 2 detik — coba tutup tab/minimize
+            // Di web: coba window.close(), kalau gagal push state lagi (tidak bisa keluar)
+            // Di APK: onKeyDown yang handle exit via moveTaskToBack
+            try { window.close(); } catch(ex) {}
+            // Kalau window.close() gagal (web biasa), push state lagi supaya tidak keluar
+            window.history.pushState({ view: currentView }, '', '#' + currentView);
+            return;
         }
         _lastBackTime = now;
         _showBackToast();
@@ -463,8 +468,9 @@ window.addEventListener('popstate', function(e) {
     if (window.history && window.history.replaceState) {
         window.history.replaceState({ view: 'home' }, '', '#home');
     }
-    // Tambah satu entry lagi agar ada "sesuatu" untuk di-pop sebelum keluar
+    // Push 2 entry buffer agar back pertama tidak langsung keluar
     if (window.history && window.history.pushState) {
+        window.history.pushState({ view: 'home' }, '', '#home');
         window.history.pushState({ view: 'home' }, '', '#home');
     }
 })();

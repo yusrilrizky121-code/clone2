@@ -214,12 +214,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            // Coba navigasi balik di WebView dulu (jika ada history internal)
-            if (webView.canGoBack()) {
-                webView.goBack();
-                return true;
-            }
-            // Cek view aktif via JS
+            // Langsung cek view aktif via JS (tidak pakai canGoBack karena history dikelola JS)
             webView.evaluateJavascript(
                 "(function(){ " +
                 "  var active = document.querySelector('.view-section.active');" +
