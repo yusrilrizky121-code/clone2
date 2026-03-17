@@ -1,4 +1,5 @@
-﻿var API_BASE = 'https://clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app';
+var API_BASE = 'https://clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app';
+
 // ===================== PWA =====================
 let deferredPrompt;
 if ('serviceWorker' in navigator) {
@@ -628,6 +629,5 @@ window.onload = function() {
     loadHomeData();
     renderSearchCategories();
 };
-
 
 

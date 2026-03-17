@@ -165,6 +165,13 @@ function startLyricsScroll() {
     }, 300);
 }
 function stopLyricsScroll() { if (lyricsScrollInterval) { clearInterval(lyricsScrollInterval); lyricsScrollInterval = null; } }
+function closeLyricsToPlayer() {
+    document.getElementById('lyricsModal').style.display = 'none';
+    document.getElementById('lyricsBody').innerHTML = '';
+    stopLyricsScroll();
+    lyricsLines = []; currentHighlightIdx = -1;
+    document.getElementById('playerModal').style.display = 'flex';
+}
 function closeLyrics() { document.getElementById('lyricsModal').style.display = 'none'; document.getElementById('lyricsBody').innerHTML = ''; stopLyricsScroll(); lyricsLines = []; currentHighlightIdx = -1; }
 
 // ===================== BACKGROUND AUDIO =====================
@@ -419,7 +426,7 @@ function addTrackToPlaylist(id) {
 var SETTINGS_KEY = 'auspoty_settings';
 var defaultSettings = { theme: 'green', darkMode: true, quality: 'auto', fontSize: 'normal', language: 'id', region: 'ID', autoplay: true, crossfade: false, normalize: false, lyricsSync: true, notifNowPlaying: true, notifNewRelease: false };
 var themeMap = { green: { name: 'Hijau (Default)', color: '#1ed760', dark: '#1db954' }, blue: { name: 'Biru', color: '#2196f3', dark: '#1976d2' }, purple: { name: 'Ungu', color: '#9c27b0', dark: '#7b1fa2' }, red: { name: 'Merah', color: '#f44336', dark: '#d32f2f' }, orange: { name: 'Oranye', color: '#ff9800', dark: '#f57c00' }, pink: { name: 'Pink', color: '#e91e63', dark: '#c2185b' } };
-var qualityOpts = ['auto', '144p', '240p', '360p', '480p', '720p', '1080p'];
+var qualityOpts = [{ value: 'auto', label: 'Auto (Disarankan)' },{ value: 'low', label: 'Rendah (64 kbps)' },{ value: 'medium', label: 'Sedang (128 kbps)' },{ value: 'high', label: 'Tinggi (256 kbps)' },{ value: 'very_high', label: 'Sangat Tinggi (320 kbps)' }];
 var fontOpts = { small: 'Kecil', normal: 'Normal', large: 'Besar', xlarge: 'Sangat Besar' };
 var langOpts = { id: 'Indonesia', en: 'English', ja: 'Jepang', ko: 'Korea', zh: 'China' };
 var regionOpts = { ID: 'Indonesia', US: 'Amerika Serikat', JP: 'Jepang', KR: 'Korea', GB: 'Inggris' };
@@ -461,7 +468,7 @@ function renderSettingsUI() {
     if (avEl) avEl.innerText = profileName.charAt(0).toUpperCase();
     function setLabel(id, val) { var el = document.getElementById(id); if (el) el.innerText = val; }
     setLabel('themeLabel', (themeMap[s.theme] || themeMap.green).name);
-    setLabel('qualityLabel', s.quality === 'auto' ? 'Auto' : s.quality);
+    var qFound = qualityOpts.find(function(q) { return q.value === s.quality; }); setLabel('qualityLabel', qFound ? qFound.label : 'Auto (Disarankan)');
     setLabel('fontSizeLabel', fontOpts[s.fontSize] || 'Normal');
     setLabel('langLabel', langOpts[s.language] || 'Indonesia');
     setLabel('regionLabel', regionOpts[s.region] || 'Indonesia');
@@ -533,8 +540,8 @@ function openThemePicker() {
 }
 function openQualityPicker() {
     var s = getSettings();
-    var opts = qualityOpts.map(function(q) { return { value: q, label: q === 'auto' ? 'Auto' : q }; });
-    openPicker('Kualitas Video', opts, s.quality, function(val, label) {
+    var opts = qualityOpts.map(function(q) { return { value: q.value, label: q.label }; });
+    openPicker('Kualitas Audio', opts, s.quality, function(val, label) {
         s.quality = val; saveSettings(s);
         var el = document.getElementById('qualityLabel'); if (el) el.innerText = label;
         showToast('Kualitas: ' + label);
@@ -621,5 +628,6 @@ window.onload = function() {
     loadHomeData();
     renderSearchCategories();
 };
+
 
 
