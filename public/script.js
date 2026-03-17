@@ -272,31 +272,9 @@ const HOME_QUERIES_BY_LANG = {
         { id: 'rowHits',    query: 'kpop trending today' },
     ],
 };
-const SECTION_TITLES_BY_LANG = {
-    Indonesia: ['Sering kamu dengarkan','Rilis Anyar','Gembira & Semangat','Tangga Lagu Populer','Galau Terpopuler','Viral TikTok','Artis Terpopuler','Hit Hari Ini'],
-    English:   ['Recently Played','New Releases','Happy & Energetic','Top Charts','Sad Songs','Viral TikTok','Popular Artists','Hits Today'],
-    Japanese:  ['最近再生','新着リリース','元気な曲','人気チャート','悲しい曲','バイラルTikTok','人気アーティスト','今日のヒット'],
-    Korean:    ['최근 재생','신규 발매','신나는 노래','인기 차트','슬픈 노래','바이럴 틱톡','인기 아티스트','오늘의 히트'],
-};
-function getHomeQueries() {
-    const s = getSettings();
-    const region = s.region || 'Indonesia';
-    const lang = s.language || 'Indonesia';
-    // Region override dulu, kalau ada
-    if (HOME_QUERIES_BY_REGION && HOME_QUERIES_BY_REGION[region]) {
-        return HOME_QUERIES_BY_REGION[region];
-    }
-    return HOME_QUERIES_BY_LANG[lang] || HOME_QUERIES_BY_LANG.Indonesia;
-}
-function applyLanguageTitles() {
-    const lang = getSettings().language || 'Indonesia';
-    const titles = SECTION_TITLES_BY_LANG[lang] || SECTION_TITLES_BY_LANG.Indonesia;
-    const titleEls = document.querySelectorAll('.section-title');
-    const titleMap = ['Sering','Rilis','Gembira','Tangga','Galau','Viral','Artis','Hit'];
-    titleEls.forEach((el, i) => { if (titles[i]) el.innerText = titles[i]; });
 
 const HOME_QUERIES_BY_REGION = {
-    Indonesia: null, // pakai HOME_QUERIES_BY_LANG
+    Indonesia: null,
     Global: [
         { id: 'rowAnyar',   query: 'top global songs 2025' },
         { id: 'rowGembira', query: 'happy pop songs 2025' },
@@ -330,6 +308,122 @@ const HOME_QUERIES_BY_REGION = {
         { id: 'rowHits',    query: 'kpop trending today' },
     ],
 };
+const SECTION_TITLES_BY_LANG = {
+    Indonesia: ['Sering kamu dengarkan','Rilis Anyar','Gembira & Semangat','Tangga Lagu Populer','Galau Terpopuler','Viral TikTok','Artis Terpopuler','Hit Hari Ini'],
+    English:   ['Recently Played','New Releases','Happy & Energetic','Top Charts','Sad Songs','Viral TikTok','Popular Artists','Hits Today'],
+    Japanese:  ['最近再生','新着リリース','元気な曲','人気チャート','悲しい曲','バイラルTikTok','人気アーティスト','今日のヒット'],
+    Korean:    ['최근 재생','신규 발매','신나는 노래','인기 차트','슬픈 노래','바이럴 틱톡','인기 아티스트','오늘의 히트'],
+};
+function getHomeQueries() {
+    const s = getSettings();
+    const region = s.region || 'Indonesia';
+    const lang = s.language || 'Indonesia';
+    // Region override dulu, kalau ada
+    if (HOME_QUERIES_BY_REGION && HOME_QUERIES_BY_REGION[region]) {
+        return HOME_QUERIES_BY_REGION[region];
+    }
+    return HOME_QUERIES_BY_LANG[lang] || HOME_QUERIES_BY_LANG.Indonesia;
+}
+function applyLanguageTitles() {
+    const lang = getSettings().language || 'Indonesia';
+    const titles = SECTION_TITLES_BY_LANG[lang] || SECTION_TITLES_BY_LANG.Indonesia;
+    const titleEls = document.querySelectorAll('.section-title');
+    const titleMap = ['Sering','Rilis','Gembira','Tangga','Galau','Viral','Artis','Hit'];
+    titleEls.forEach((el, i) => { if (titles[i]) el.innerText = titles[i]; });
+
+function applyUILanguage() {
+    const lang = getSettings().language || 'Indonesia';
+    const t = UI_STRINGS[lang] || UI_STRINGS.Indonesia;
+    function setText(id, val) { const el = document.getElementById(id); if (el) el.innerText = val; }
+    function setAttr(id, attr, val) { const el = document.getElementById(id); if (el) el.setAttribute(attr, val); }
+    function setQueryAll(sel, val) { document.querySelectorAll(sel).forEach(el => { if (el.innerText.trim()) el.innerText = val; }); }
+
+    // Nav items
+    const navItems = document.querySelectorAll('.nav-item');
+    if (navItems[0]) navItems[0].childNodes[navItems[0].childNodes.length-1].textContent = t.navHome;
+    if (navItems[1]) navItems[1].childNodes[navItems[1].childNodes.length-1].textContent = t.navSearch;
+    if (navItems[2]) navItems[2].childNodes[navItems[2].childNodes.length-1].textContent = t.navLibrary;
+    if (navItems[3]) navItems[3].childNodes[navItems[3].childNodes.length-1].textContent = t.navSettings;
+
+    // Search
+    setAttr('searchInput', 'placeholder', t.searchPlaceholder);
+    const searchH1 = document.querySelector('#view-search .search-header-container h1');
+    if (searchH1) searchH1.innerText = t.searchTitle;
+    const browseTitle = document.querySelector('#searchCategoriesUI .section-title');
+    if (browseTitle) browseTitle.innerText = t.searchBrowse;
+
+    // Library
+    const libTitle = document.querySelector('.lib-title');
+    if (libTitle) libTitle.innerText = t.libTitle;
+
+    // Settings header
+    const settH1 = document.querySelector('#view-settings .settings-header h1');
+    if (settH1) settH1.innerText = t.settingsTitle;
+
+    // Settings group labels
+    const groupLabels = document.querySelectorAll('.settings-group-label');
+    const labelKeys = ['settingsDisplay','settingsLangRegion','settingsPlayback','settingsNotif','settingsStorage','settingsAbout'];
+    groupLabels.forEach((el, i) => { if (labelKeys[i] && t[labelKeys[i]]) el.innerText = t[labelKeys[i]]; });
+
+    // Settings item titles (by order in settings groups)
+    const allSettingsTitles = document.querySelectorAll('.settings-item-title');
+    const titleMap = [
+        null, // login/logout - skip
+        null,
+        t.settingsTheme,
+        t.settingsDark,
+        t.settingsQuality,
+        t.settingsFontSize,
+        t.settingsLang,
+        t.settingsRegion,
+        t.settingsAutoplay,
+        t.settingsCrossfade,
+        t.settingsNormalize,
+        t.settingsLyricsSync,
+        t.settingsNotifSong,
+        t.settingsNotifRelease,
+        t.settingsClearCache,
+        t.settingsClearLiked,
+        t.settingsDeveloper,
+        t.settingsVersion,
+    ];
+    // Lebih aman: cari by ID atau data attribute
+    // Gunakan querySelector dengan text matching
+    const settingsItemMap = {
+        'Tema Warna': t.settingsTheme, 'Color Theme': t.settingsTheme, 'カラーテーマ': t.settingsTheme, '색상 테마': t.settingsTheme,
+        'Mode Gelap': t.settingsDark, 'Dark Mode': t.settingsDark, 'ダークモード': t.settingsDark, '다크 모드': t.settingsDark,
+        'Kualitas Audio': t.settingsQuality, 'Audio Quality': t.settingsQuality, '音質': t.settingsQuality, '음질': t.settingsQuality,
+        'Ukuran Teks': t.settingsFontSize, 'Text Size': t.settingsFontSize, '文字サイズ': t.settingsFontSize, '텍스트 크기': t.settingsFontSize,
+        'Bahasa Aplikasi': t.settingsLang, 'App Language': t.settingsLang, 'アプリの言語': t.settingsLang, '앱 언어': t.settingsLang,
+        'Wilayah Konten': t.settingsRegion, 'Content Region': t.settingsRegion, 'コンテンツ地域': t.settingsRegion, '콘텐츠 지역': t.settingsRegion,
+        'Putar Otomatis': t.settingsAutoplay, 'Autoplay': t.settingsAutoplay, '自動再生': t.settingsAutoplay, '자동 재생': t.settingsAutoplay,
+        'Crossfade': t.settingsCrossfade, 'クロスフェード': t.settingsCrossfade, '크로스페이드': t.settingsCrossfade,
+        'Normalisasi Volume': t.settingsNormalize, 'Volume Normalization': t.settingsNormalize, '音量正規化': t.settingsNormalize, '볼륨 정규화': t.settingsNormalize,
+        'Sinkronisasi Lirik': t.settingsLyricsSync, 'Lyrics Sync': t.settingsLyricsSync, '歌詞同期': t.settingsLyricsSync, '가사 동기화': t.settingsLyricsSync,
+        'Notifikasi Lagu': t.settingsNotifSong, 'Now Playing Notification': t.settingsNotifSong, '再生中の通知': t.settingsNotifSong, '재생 중 알림': t.settingsNotifSong,
+        'Rilis Baru': t.settingsNotifRelease, 'New Releases': t.settingsNotifRelease, '新着リリース': t.settingsNotifRelease, '새 릴리스': t.settingsNotifRelease,
+        'Hapus Cache': t.settingsClearCache, 'Clear Cache': t.settingsClearCache, 'キャッシュを削除': t.settingsClearCache, '캐시 지우기': t.settingsClearCache,
+        'Hapus Lagu Disukai': t.settingsClearLiked, 'Clear Liked Songs': t.settingsClearLiked, 'お気に入りを削除': t.settingsClearLiked, '좋아요 삭제': t.settingsClearLiked,
+        'Developer': t.settingsDeveloper,
+        'Versi Aplikasi': t.settingsVersion, 'App Version': t.settingsVersion, 'アプリバージョン': t.settingsVersion, '앱 버전': t.settingsVersion,
+        'Masuk dengan Google': t.loginGoogle, 'Sign in with Google': t.loginGoogle, 'Googleでサインイン': t.loginGoogle, 'Google로 로그인': t.loginGoogle,
+    };
+    document.querySelectorAll('.settings-item-title').forEach(el => {
+        const txt = el.innerText.trim();
+        if (settingsItemMap[txt]) el.innerText = settingsItemMap[txt];
+    });
+
+    // Login/logout sub text
+    setText('googleLoginText', t.loginGoogle);
+    setText('googleLoginSub', t.loginSub);
+
+    // Home pills
+    const pills = document.querySelectorAll('#view-home .pill');
+    if (pills[0]) pills[0].innerText = t.homePillAll;
+    if (pills[1]) pills[1].innerText = t.homePillMusic;
+    if (pills[2]) pills[2].innerText = t.homePillPodcast;
+}
+;
 }
 const HOME_QUERIES = [
     { id: 'rowAnyar',   query: 'lagu indonesia terbaru 2025' },
@@ -354,6 +448,7 @@ async function loadHomeData() {
     const artistEl = document.getElementById('rowArtists');
     if (artistEl) artistEl.innerHTML = ARTISTS.map(renderArtistCard).join('');
     applyLanguageTitles();
+    applyUILanguage();
     for (const row of getHomeQueries()) {
         const el = document.getElementById(row.id);
         if (!el) continue;
@@ -640,6 +735,7 @@ function applyAllSettings() {
     const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = s.profileName || 'Pengguna Auspoty';
     const pav = document.getElementById('settingsAvatar'); if (pav && !pav.querySelector('img')) pav.innerText = (s.profileName || 'A').charAt(0).toUpperCase();
     estimateCacheSize();
+    applyUILanguage();
 }
 function setToggle(id, active) {
     const el = document.getElementById(id); if (!el) return;
