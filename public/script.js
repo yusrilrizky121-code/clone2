@@ -694,28 +694,10 @@ async function downloadMusic() {
 
 function loginWithGoogle() {
     const user = getGoogleUser();
-    if (user) {
-        if (confirm('Keluar dari akun ' + user.name + '?')) {
-            if (window._firebaseSignOut) {
-                window._firebaseSignOut();
-            } else {
-                localStorage.removeItem('auspotyGoogleUser');
-                updateProfileUI();
-                showToast('Berhasil keluar');
-            }
-        }
-        return;
-    }
-    // Cek apakah Firebase sudah dikonfigurasi
+    if (user) return;
     if (window._firebaseSignIn) {
-        // Cek apakah config sudah diisi (bukan placeholder)
-        if (typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey === 'FIREBASE_API_KEY') {
-            _showFirebaseSetupInfo();
-            return;
-        }
         window._firebaseSignIn();
     } else {
-        // Firebase belum load, tampilkan modal
         document.getElementById('loginModal').style.display = 'flex';
     }
 }
@@ -738,6 +720,8 @@ function getGoogleUser() {
 function updateProfileUI() {
     const user = getGoogleUser();
     const s = getSettings();
+    const loginBtn = document.getElementById('googleLoginBtn');
+    const logoutBtn = document.getElementById('googleLogoutBtn');
     if (user) {
         const av = document.getElementById('settingsAvatar');
         if (av) {
@@ -751,10 +735,8 @@ function updateProfileUI() {
         if (pname) pname.innerText = user.name;
         const psub = document.getElementById('settingsProfileSub');
         if (psub) psub.innerText = user.email;
-        const loginText = document.getElementById('googleLoginText');
-        if (loginText) loginText.innerText = 'Keluar dari Google';
-        const loginSub = document.getElementById('googleLoginSub');
-        if (loginSub) loginSub.innerText = user.email;
+        const logoutSub = document.getElementById('googleLogoutSub');
+        if (logoutSub) logoutSub.innerText = user.email;
         const homeAv = document.querySelector('.app-avatar');
         if (homeAv) {
             if (user.picture) {
@@ -763,6 +745,8 @@ function updateProfileUI() {
                 homeAv.innerText = user.name.charAt(0).toUpperCase();
             }
         }
+        if (loginBtn) loginBtn.style.display = 'none';
+        if (logoutBtn) logoutBtn.style.display = 'block';
     } else {
         const av = document.getElementById('settingsAvatar');
         if (av) av.innerText = (s.profileName || 'A').charAt(0).toUpperCase();
@@ -770,10 +754,19 @@ function updateProfileUI() {
         if (pname) pname.innerText = s.profileName || 'Pengguna Auspoty';
         const psub = document.getElementById('settingsProfileSub');
         if (psub) psub.innerText = 'Auspoty Premium';
-        const loginText = document.getElementById('googleLoginText');
-        if (loginText) loginText.innerText = 'Masuk dengan Google';
-        const loginSub = document.getElementById('googleLoginSub');
-        if (loginSub) loginSub.innerText = 'Sinkronkan data kamu';
+        if (loginBtn) loginBtn.style.display = 'block';
+        if (logoutBtn) logoutBtn.style.display = 'none';
+    }
+}
+
+function logoutFromGoogle() {
+    if (!confirm('Keluar dari akun Google?')) return;
+    if (window._firebaseSignOut) {
+        window._firebaseSignOut();
+    } else {
+        localStorage.removeItem('auspotyGoogleUser');
+        updateProfileUI();
+        showToast('Berhasil keluar');
     }
 }
 // INIT
