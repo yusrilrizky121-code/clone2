@@ -17,6 +17,51 @@ body.light-mode { --bg-base:#f5f5f5; --bg-highlight:#e8e8e8; --bg-card:#ffffff; 
 .view-section.active { display:block; }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
+/* HOME HEADER */
+.home-header { padding:16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:var(--bg-base); z-index:50; }
+.home-header-left { display:flex; align-items:center; gap:12px; }
+.app-avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--spotify-green),var(--spotify-green-dark)); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#000; flex-shrink:0; overflow:hidden; }
+.home-pills { display:flex; gap:8px; }
+.pill { background:#2a2a2a; color:white; padding:8px 16px; border-radius:20px; font-size:13px; font-weight:500; cursor:pointer; border:none; }
+.pill.active { background:var(--spotify-green); color:black; }
+.install-btn { background:transparent; border:none; cursor:pointer; padding:4px; }
+.install-btn svg { fill:white; width:22px; height:22px; }
+
+/* SECTIONS */
+.section-container { margin-bottom:32px; }
+.section-title { font-size:22px; font-weight:700; margin:0 16px 16px; letter-spacing:-.5px; }
+
+/* VERTICAL LIST */
+.vertical-list { padding:0 16px; display:flex; flex-direction:column; gap:16px; }
+.v-item { display:grid; grid-template-columns:48px 1fr 24px; gap:12px; align-items:center; cursor:pointer; transition:opacity .15s; }
+.v-item:active { opacity:.6; }
+.v-img { width:48px; height:48px; object-fit:cover; border-radius:4px; background:#282828; }
+.v-info { overflow:hidden; }
+.v-title { font-size:16px; font-weight:400; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:2px; }
+.v-sub { font-size:13px; color:var(--text-sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dots-icon { fill:var(--text-sub); width:20px; height:20px; }
+
+/* HORIZONTAL SCROLL */
+.horizontal-scroll { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; gap:16px; padding:0 16px; }
+.horizontal-scroll::-webkit-scrollbar { display:none; }
+.h-card { width:140px; flex-shrink:0; scroll-snap-align:start; cursor:pointer; transition:opacity .15s; }
+.h-card:active { opacity:.6; }
+.h-img { width:140px; height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; background:#282828; box-shadow:0 8px 24px rgba(0,0,0,.5); display:block; }
+.h-img.artist-img { border-radius:50%; }
+.h-title { font-size:13px; font-weight:600; line-height:1.2; margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.h-sub { font-size:12px; color:var(--text-sub); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+/* SEARCH */
+.search-header-container { padding:40px 16px 16px; }
+.search-header-container h1 { font-size:24px; font-weight:700; }
+.search-box-wrapper { margin:0 16px 20px; position:relative; }
+.search-icon-input { position:absolute; left:12px; top:12px; width:24px; height:24px; fill:#121212; }
+.search-box { width:100%; padding:14px 14px 14px 44px; border-radius:4px; border:none; font-size:15px; font-weight:500; background:white; color:black; outline:none; }
+.category-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 16px; }
+.category-card { border-radius:8px; padding:16px; height:80px; display:flex; align-items:flex-end; cursor:pointer; transition:opacity .15s; overflow:hidden; position:relative; }
+.category-card:active { opacity:.7; }
+.category-title { font-size:14px; font-weight:700; color:white; }
+
 /* SETTINGS - Apple Music Style */
 .settings-header {
     padding: 52px 20px 8px;
