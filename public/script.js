@@ -56,7 +56,7 @@ function updateMediaSession() {
 async function playNextSimilarSong() {
     if (!currentTrack) return;
     try {
-        const res = await fetch('/api/search?query=' + encodeURIComponent(currentTrack.artist + ' official audio'));
+        const res = await apiFetch('/api/search?query=' + encodeURIComponent(currentTrack.artist + ' official audio'));
         const result = await res.json();
         if (result.status === 'success' && result.data.length > 0) {
             const related = result.data.filter(t => t.videoId !== currentTrack.videoId);
@@ -132,7 +132,7 @@ async function openLyricsModal() {
     stopLyricsScroll(); lyricsLines = []; currentHighlightIdx = -1;
     document.getElementById('playerModal').style.display = 'none';
     try {
-        const res = await fetch('/api/lyrics?video_id=' + currentTrack.videoId);
+        const res = await apiFetch('/api/lyrics?video_id=' + currentTrack.videoId);
         const result = await res.json();
         if (result.status === 'success' && result.data && result.data.lines && result.data.lines.length > 0) {
             lyricsLines = result.data.lines; lyricsType = result.data.type || 'plain';
@@ -437,7 +437,7 @@ async function loadHomeData() {
     const recentEl = document.getElementById('recentList');
     if (recentEl) {
         try {
-            const res = await fetch('/api/search?query=lagu+populer+indonesia');
+            const res = await apiFetch('/api/search?query=lagu+populer+indonesia');
             const result = await res.json();
             if (result.status === 'success' && result.data.length > 0) {
                 recentEl.innerHTML = result.data.slice(0, 6).map(renderVItem).join('');
@@ -453,7 +453,7 @@ async function loadHomeData() {
         if (!el) continue;
         el.innerHTML = '<div style="color:var(--text-sub);padding:8px 0;font-size:13px;">Memuat...</div>';
         try {
-            const res = await fetch('/api/search?query=' + encodeURIComponent(row.query));
+            const res = await apiFetch('/api/search?query=' + encodeURIComponent(row.query));
             const result = await res.json();
             if (result.status === 'success' && result.data.length > 0) {
                 el.innerHTML = result.data.slice(0, 10).map(renderHCard).join('');
@@ -510,7 +510,7 @@ async function doSearch(q) {
     const el = document.getElementById('searchResults');
     el.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Mencari...</div>';
     try {
-        const res = await fetch('/api/search?query=' + encodeURIComponent(q));
+        const res = await apiFetch('/api/search?query=' + encodeURIComponent(q));
         const result = await res.json();
         if (result.status === 'success' && result.data.length > 0) {
             el.innerHTML = result.data.map(renderVItem).join('');
@@ -527,7 +527,7 @@ async function openArtist(encodedName) {
     document.getElementById('artistTracksContainer').innerHTML = '<div style="color:var(--text-sub);padding:16px;">Memuat...</div>';
     switchView('artist');
     try {
-        const res = await fetch('/api/search?query=' + encodeURIComponent(name));
+        const res = await apiFetch('/api/search?query=' + encodeURIComponent(name));
         const result = await res.json();
         if (result.status === 'success' && result.data.length > 0) {
             window._artistTracks = result.data;
@@ -888,6 +888,18 @@ function clearLikedSongs() {
 // REPEAT & PREV/NEXT
 let isRepeat = false;
 let songHistory = [];
+// API FETCH dengan fallback ke deployment aktif
+async function apiFetch(path) {
+    const FALLBACK = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
+    try {
+        const r = await fetch(path);
+        if (r.ok) return r;
+        throw new Error('not ok');
+    } catch(e) {
+        return fetch(FALLBACK + path);
+    }
+}
+
 function toggleRepeat() {
     isRepeat = !isRepeat;
     const btn = document.getElementById('repeatBtn');
