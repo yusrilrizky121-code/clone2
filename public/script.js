@@ -418,30 +418,42 @@ function _showBackToast() {
 }
 
 window.addEventListener('popstate', function(e) {
-    if (e.state && e.state.view && e.state.view !== 'home') {
-        // Navigasi ke view sebelumnya tanpa push state baru
-        document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
-        const target = document.getElementById('view-' + e.state.view);
-        if (target) target.classList.add('active');
-        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-        const navMap = { home: 0, search: 1, library: 2, settings: 3 };
-        const navItems = document.querySelectorAll('.nav-item');
-        if (navMap[e.state.view] !== undefined && navItems[navMap[e.state.view]]) {
-            navItems[navMap[e.state.view]].classList.add('active');
-        }
-        window.scrollTo(0, 0);
-        // Push ulang agar ada entry untuk back berikutnya
-        window.history.pushState({ view: e.state.view }, '', '#' + e.state.view);
-    } else {
-        // Sudah di home — double back to exit
+    // home/search/library → double back to exit
+    // settings → kembali ke home (bukan exit)
+    // View sub (artist, playlist, developer) → kembali ke home
+    var doubleBackViews = ['home', 'search', 'library'];
+    var currentView = (e.state && e.state.view) ? e.state.view : 'home';
+
+    if (doubleBackViews.indexOf(currentView) >= 0) {
+        // Di view utama — double back to exit
         var now = Date.now();
         if (now - _lastBackTime < 2000) {
-            // Tekan 2x — biarkan browser keluar secara normal
-            return;
+            // Tekan 2x dalam 2 detik — keluar dari app
+            return; // biarkan browser/WebView keluar
         }
         _lastBackTime = now;
         _showBackToast();
-        // Push state home lagi agar tidak langsung keluar
+        // Push state ulang agar tidak langsung keluar
+        window.history.pushState({ view: currentView }, '', '#' + currentView);
+    } else if (currentView === 'settings') {
+        // Di settings — kembali ke home, bukan exit
+        document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+        var home = document.getElementById('view-home');
+        if (home) home.classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        var navItems = document.querySelectorAll('.nav-item');
+        if (navItems[0]) navItems[0].classList.add('active');
+        window.scrollTo(0, 0);
+        window.history.pushState({ view: 'home' }, '', '#home');
+    } else {
+        // Di view sub (artist/playlist/developer) — kembali ke home
+        document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+        var home2 = document.getElementById('view-home');
+        if (home2) home2.classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        var navItems2 = document.querySelectorAll('.nav-item');
+        if (navItems2[0]) navItems2[0].classList.add('active');
+        window.scrollTo(0, 0);
         window.history.pushState({ view: 'home' }, '', '#home');
     }
 });
@@ -450,6 +462,10 @@ window.addEventListener('popstate', function(e) {
 (function() {
     if (window.history && window.history.replaceState) {
         window.history.replaceState({ view: 'home' }, '', '#home');
+    }
+    // Tambah satu entry lagi agar ada "sesuatu" untuk di-pop sebelum keluar
+    if (window.history && window.history.pushState) {
+        window.history.pushState({ view: 'home' }, '', '#home');
     }
 })();
 

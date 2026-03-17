@@ -207,33 +207,41 @@ public class MainActivity extends AppCompatActivity {
 
     private long lastBackPressTime = 0;
 
+    // View utama yang trigger double-back (home, search, library)
+    // Settings → kembali ke home, bukan exit
+    private static final String[] DOUBLE_BACK_VIEWS = {"view-home", "view-search", "view-library"};
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            // Coba navigasi balik di WebView dulu
+            // Coba navigasi balik di WebView dulu (jika ada history internal)
             if (webView.canGoBack()) {
                 webView.goBack();
                 return true;
             }
-            // Coba navigasi ke home via JS (jika bukan di home)
+            // Cek view aktif via JS
             webView.evaluateJavascript(
                 "(function(){ " +
                 "  var active = document.querySelector('.view-section.active');" +
-                "  if (active && active.id !== 'view-home') {" +
-                "    if (typeof switchView === 'function') switchView('home');" +
-                "    return 'navigated';" +
-                "  }" +
-                "  return 'home';" +
+                "  return active ? active.id : 'view-home';" +
                 "})()",
                 result -> {
-                    if (result != null && result.contains("navigated")) {
-                        // sudah navigasi ke home, jangan keluar
-                    } else {
-                        // Sudah di home — double back to exit
+                    if (result == null) result = ""view-home"";
+                    // Hapus tanda kutip dari hasil JS
+                    final String viewId = result.replace(""", "").trim();
+
+                    // Cek apakah ini view yang trigger double-back
+                    boolean isDoubleBackView = false;
+                    for (String v : DOUBLE_BACK_VIEWS) {
+                        if (v.equals(viewId)) { isDoubleBackView = true; break; }
+                    }
+
+                    if (isDoubleBackView) {
+                        // Di home/search/library — double back to exit
                         long now = System.currentTimeMillis();
                         if (now - lastBackPressTime < 2000) {
-                            // Tekan back 2x dalam 2 detik → minimize
-                            moveTaskToBack(true);
+                            // Tekan 2x → minimize app (bukan kill)
+                            runOnUiThread(() -> moveTaskToBack(true));
                         } else {
                             lastBackPressTime = now;
                             runOnUiThread(() ->
@@ -244,6 +252,12 @@ public class MainActivity extends AppCompatActivity {
                                 ).show()
                             );
                         }
+                    } else {
+                        // Di settings atau view sub → kembali ke home
+                        runOnUiThread(() ->
+                            webView.evaluateJavascript(
+                                "if(typeof switchView==='function') switchView('home');", null)
+                        );
                     }
                 }
             );
