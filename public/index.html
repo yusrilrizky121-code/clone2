@@ -530,7 +530,14 @@
             <div onclick="closeEditProfile()" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);font-size:18px;">✕</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px;">
-            <div id="editProfileAvatar" style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--spotify-green),var(--spotify-green-dark));display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#000;margin-bottom:12px;">A</div>
+            <div style="position:relative;cursor:pointer;" onclick="document.getElementById('profilePhotoInput').click()">
+                <div id="editProfileAvatar" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--spotify-green),var(--spotify-green-dark));display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#000;overflow:hidden;">A</div>
+                <div style="position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;background:var(--spotify-green);display:flex;align-items:center;justify-content:center;border:2px solid var(--bg-card);">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:#000;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </div>
+            </div>
+            <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;" onchange="previewProfilePhoto(event)">
+            <p style="font-size:12px;color:var(--text-sub);margin-top:8px;">Ketuk foto untuk mengubah</p>
         </div>
         <div style="margin-bottom:16px;">
             <label style="font-size:12px;color:var(--text-sub);display:block;margin-bottom:6px;">Nama Pengguna</label>
