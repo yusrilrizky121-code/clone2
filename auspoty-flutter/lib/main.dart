@@ -368,6 +368,60 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   }
 
   Future<void> _injectBridge(InAppWebViewController controller) async {
+    // FIX UTAMA: Inject CSS langsung — override bottom-nav supaya tidak overlap konten
+    await controller.evaluateJavascript(source: r'''
+      (function(){
+        var id = '__flutter_nav_fix__';
+        var old = document.getElementById(id);
+        if(old) old.remove();
+        var s = document.createElement('style');
+        s.id = id;
+        s.textContent = `
+          /* FIX: bottom-nav tidak overlap konten */
+          .bottom-nav {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 60px !important;
+            min-height: 60px !important;
+            display: flex !important;
+            justify-content: space-around !important;
+            align-items: center !important;
+            padding: 0 !important;
+            background: rgba(10,10,15,0.95) !important;
+            backdrop-filter: blur(30px) !important;
+            -webkit-backdrop-filter: blur(30px) !important;
+            border-top: 1px solid rgba(255,255,255,0.1) !important;
+            z-index: 1000 !important;
+          }
+          .nav-item {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 3px !important;
+            font-size: 10px !important;
+            min-width: 60px !important;
+            height: 60px !important;
+            cursor: pointer !important;
+            color: rgba(255,255,255,0.5) !important;
+          }
+          .nav-item.active { color: #a78bfa !important; }
+          .nav-item svg { width: 22px !important; height: 22px !important; fill: currentColor !important; }
+          /* FIX: body padding supaya konten tidak tertutup nav */
+          body { padding-bottom: 140px !important; }
+          /* FIX: mini player di atas nav */
+          .mini-player {
+            bottom: 68px !important;
+          }
+          /* FIX: toast di atas nav */
+          .toast-notification.show { bottom: 80px !important; }
+        `;
+        document.head.appendChild(s);
+      })();
+    ''');
+
     // Inject AndroidBridge
     await controller.evaluateJavascript(source: '''
       window.AndroidBridge = {
