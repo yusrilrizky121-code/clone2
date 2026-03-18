@@ -801,14 +801,21 @@ function renderLibraryUI() {
     tx.objectStore('liked_songs').getAll().onsuccess = (e) => { liked = e.target.result || []; };
     tx.objectStore('playlists').getAll().onsuccess = (e) => { playlists = e.target.result || []; };
     tx.oncomplete = () => {
+        const history = JSON.parse(localStorage.getItem('auspotyHistory') || '[]');
         let html = '';
-        html += '<div class="lib-item" onclick="openLikedSongs()">'+
-            '<div class="lib-item-img liked"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>'+
-            '<div class="lib-item-info"><div class="lib-item-title">Lagu yang Disukai</div><div class="lib-item-sub">Playlist ┬╖ ' + liked.length + ' lagu</div></div></div>';
+        // Lagu Disukai
+        html += '<div class="lib-item" onclick="openLikedSongs()">' +
+            '<div class="lib-item-img liked"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>' +
+            '<div class="lib-item-info"><div class="lib-item-title">Lagu yang Disukai</div><div class="lib-item-sub">Playlist \u00b7 ' + liked.length + ' lagu</div></div></div>';
+        // Riwayat Diputar
+        html += '<div class="lib-item" onclick="openHistoryView()">' +
+            '<div class="lib-item-img" style="background:linear-gradient(135deg,#1e3264,#477d95);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg></div>' +
+            '<div class="lib-item-info"><div class="lib-item-title">Riwayat Diputar</div><div class="lib-item-sub">Koleksi \u00b7 ' + history.length + ' lagu</div></div></div>';
+        // Playlist buatan user
         playlists.forEach(pl => {
-            html += '<div class="lib-item" onclick="openPlaylist(\'' + pl.id + '\')">'+
-                '<img class="lib-item-img" src="' + (pl.img || 'https://via.placeholder.com/64x64?text=music') + '" style="border-radius:4px;">'+
-                '<div class="lib-item-info"><div class="lib-item-title">' + pl.name + '</div><div class="lib-item-sub">Playlist ┬╖ ' + (pl.tracks ? pl.tracks.length : 0) + ' lagu</div></div></div>';
+            html += '<div class="lib-item" onclick="openPlaylist(\'' + pl.id + '\')">' +
+                '<img class="lib-item-img" src="' + (pl.img || 'https://via.placeholder.com/64x64?text=music') + '" style="border-radius:4px;">' +
+                '<div class="lib-item-info"><div class="lib-item-title">' + pl.name + '</div><div class="lib-item-sub">Playlist \u00b7 ' + (pl.tracks ? pl.tracks.length : 0) + ' lagu</div></div></div>';
         });
         container.innerHTML = html;
     };
@@ -1209,78 +1216,9 @@ function openHistoryView() {
     container.innerHTML = backBtn + history.slice(0, 30).map(t => renderVItem(t)).join('');
 }
 
+
 // INIT
 applyAllSettings();
+updateProfileUI();
 loadHomeData();
 renderSearchCategories();
-function updateProfileUI() {
-    const user = getGoogleUser();
-    const s = getSettings();
-    const loginBtn = document.getElementById('googleLoginBtn');
-    const logoutBtn = document.getElementById('googleLogoutBtn');
-    if (user) {
-        const av = document.getElementById('settingsAvatar');
-        if (av) {
-            const customPhoto = localStorage.getItem('auspotyCustomPhoto');
-            if (customPhoto) {
-                av.innerHTML = '<img src="'+customPhoto+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-            } else if (user.picture) {
-                av.innerHTML = '<img src="'+user.picture+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-            } else {
-                av.innerText = user.name.charAt(0).toUpperCase();
-            }
-        }
-        const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = user.name;
-        const psub = document.getElementById('settingsProfileSub'); if (psub) psub.innerText = user.email;
-        const logoutSub = document.getElementById('googleLogoutSub'); if (logoutSub) logoutSub.innerText = user.email;
-        const homeAv = document.querySelector('.app-avatar');
-        if (homeAv) {
-            const customPhotoH = localStorage.getItem('auspotyCustomPhoto');
-            if (customPhotoH) {
-                homeAv.innerHTML = '<img src="'+customPhotoH+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-            } else if (user.picture) {
-                homeAv.innerHTML = '<img src="'+user.picture+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-            } else {
-                homeAv.innerText = user.name.charAt(0).toUpperCase();
-            }
-        }
-        if (loginBtn) loginBtn.style.display = 'none';
-        if (logoutBtn) logoutBtn.style.display = 'block';
-    } else {
-        const av = document.getElementById('settingsAvatar');
-        if (av) {
-            const customPhoto = localStorage.getItem('auspotyCustomPhoto');
-            if (customPhoto) {
-                av.innerHTML = '<img src="'+customPhoto+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-            } else {
-                av.innerHTML = '';
-                av.innerText = (s.profileName||'A').charAt(0).toUpperCase();
-            }
-        }
-        const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = s.profileName||'Pengguna Auspoty';
-        const psub = document.getElementById('settingsProfileSub'); if (psub) psub.innerText = 'Auspoty Premium';
-        if (loginBtn) loginBtn.style.display = 'block';
-        if (logoutBtn) logoutBtn.style.display = 'none';
-    }
-}
-function loginWithGoogle() { if (typeof window._firebaseSignIn==='function') window._firebaseSignIn(); }
-function logoutFromGoogle() { if (typeof window._firebaseSignOut==='function') window._firebaseSignOut(); }
-function getGoogleUser() { try { return JSON.parse(localStorage.getItem('auspotyGoogleUser')||'null'); } catch(e) { return null; } }
-function previewProfilePhoto(event) {
-    const file = event.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => { const av = document.getElementById('editProfileAvatar'); if (av) av.innerHTML = '<img src="'+e.target.result+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">'; localStorage.setItem('auspotyProfilePhoto', e.target.result); };
-    reader.readAsDataURL(file);
-}
-function openEditProfile() {
-    const s = getSettings(); const user = getGoogleUser();
-    document.getElementById('editProfileName').value = user ? user.name : (s.profileName||'');
-    const av = document.getElementById('editProfileAvatar');
-    const photo = localStorage.getItem('auspotyProfilePhoto');
-    const pic = (user&&user.picture) ? user.picture : photo;
-    if (av) { if (pic) { av.innerHTML = '<img src="'+pic+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">'; } else { av.innerText = (user?user.name:(s.profileName||'A')).charAt(0).toUpperCase(); } }
-    document.getElementById('editProfileModal').style.display = 'flex';
-}
-function closeEditProfile() { document.getElementById('editProfileModal').style.display = 'none'; }
-function saveProfile() { const name = document.getElementById('editProfileName').value.trim()||'Pengguna Auspoty'; saveSettings({profileName:name}); applyAllSettings(); closeEditProfile(); showToast('Profil disimpan!'); }
-function closeLoginModal() { document.getElementById('loginModal').style.display = 'none'; }
