@@ -1,0 +1,13 @@
+{
+  "name": "Auspoty",
+  "short_name": "Auspoty",
+  "description": "Aplikasi Music & Lyrics by SANN404 FORUM | CR: Yusril WA +62 822-9770-6541",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#1ed760",
+  "icons": [
+    { "src": "https://cdn-icons-png.flaticon.com/512/174/174872.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "https://cdn-icons-png.flaticon.com/512/174/174872.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
