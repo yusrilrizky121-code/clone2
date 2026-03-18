@@ -12,12 +12,13 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "com.auspoty.app"
-    compileSdk 35
+    compileSdk 36
     ndkVersion flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
@@ -26,7 +27,7 @@ android {
 
     defaultConfig {
         applicationId "com.auspoty.app"
-        minSdk 21
+        minSdkVersion flutter.minSdkVersion
         targetSdk 35
         versionCode 3
         versionName "3.0.0"
@@ -45,9 +46,8 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            minifyEnabled false
+            shrinkResources false
         }
         debug {
             applicationIdSuffix ".debug"
@@ -66,6 +66,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'androidx.media:media:1.7.0'
 }
