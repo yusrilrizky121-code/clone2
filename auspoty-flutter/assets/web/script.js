@@ -494,17 +494,36 @@ function makeTrackData(t) {
     const img = getHighResImage(t.thumbnail || t.img || '');
     return encodeURIComponent(JSON.stringify({ videoId: t.videoId, title: t.title, artist: t.artist || 'Unknown', img }));
 }
+
+// TRACK CACHE - simpan track object supaya onclick tidak perlu encode string panjang
+window._trackCache = window._trackCache || {};
+function _cacheTrack(t) {
+    const img = getHighResImage(t.thumbnail || t.img || '');
+    window._trackCache[t.videoId] = { videoId: t.videoId, title: t.title || '', artist: t.artist || 'Unknown', img };
+}
+function playMusicById(videoId) {
+    const t = window._trackCache[videoId];
+    if (t) {
+        playMusic(t.videoId, makeTrackData(t));
+    } else {
+        // fallback: coba play langsung dengan videoId saja
+        if (ytPlayer && ytPlayer.loadVideoById) {
+            document.getElementById('miniPlayer').style.display = 'flex';
+            ytPlayer.loadVideoById(videoId);
+        }
+    }
+}
 function renderVItem(t) {
-    const d = makeTrackData(t);
-    return '<div class="v-item" onclick="playMusic(\'' + t.videoId + '\',\'' + d + '\')">'+
+    _cacheTrack(t);
+    return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">'+
         '<img class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/48x48?text=music\'">'+
         '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div>'+
         '<svg class="dots-icon" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>'+
         '</div>';
 }
 function renderHCard(t) {
-    const d = makeTrackData(t);
-    return '<div class="h-card" onclick="playMusic(\'' + t.videoId + '\',\'' + d + '\')">'+
+    _cacheTrack(t);
+    return '<div class="h-card" onclick="playMusicById(\'' + t.videoId + '\')">'+
         '<img class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/140x140?text=music\'">'+
         '<div class="h-title">' + (t.title || '') + '</div>'+
         '<div class="h-sub">' + (t.artist || '') + '</div></div>';
@@ -1216,6 +1235,78 @@ function openHistoryView() {
     container.innerHTML = backBtn + history.slice(0, 30).map(t => renderVItem(t)).join('');
 }
 
+
+
+// LOGIN / LOGOUT GOOGLE
+function loginWithGoogle() {
+    if (typeof window._firebaseSignIn === 'function') {
+        window._firebaseSignIn();
+    } else {
+        showToast('Firebase belum siap, coba lagi');
+    }
+}
+
+function logoutFromGoogle() {
+    if (typeof window._firebaseSignOut === 'function') {
+        window._firebaseSignOut().then(() => {
+            updateGoogleLoginUI();
+        });
+    } else {
+        localStorage.removeItem('auspotyGoogleUser');
+        updateGoogleLoginUI();
+        showToast('Berhasil keluar');
+    }
+}
+
+function updateGoogleLoginUI() {
+    var user = getGoogleUser();
+    var loginBtn  = document.getElementById('googleLoginBtn');
+    var logoutBtn = document.getElementById('googleLogoutBtn');
+    var loginText = document.getElementById('googleLoginText');
+    var loginSub  = document.getElementById('googleLoginSub');
+    var logoutSub = document.getElementById('googleLogoutSub');
+    if (user) {
+        if (loginBtn)  loginBtn.style.display  = 'none';
+        if (logoutBtn) logoutBtn.style.display = '';
+        if (logoutSub) logoutSub.innerText = user.name || 'Tap untuk logout';
+    } else {
+        if (loginBtn)  loginBtn.style.display  = '';
+        if (logoutBtn) logoutBtn.style.display = 'none';
+        if (loginSub)  loginSub.innerText = 'Sinkronkan data kamu';
+    }
+    updateProfileUI();
+}
+
+// GOOGLE USER HELPER
+function getGoogleUser() {
+    try { return JSON.parse(localStorage.getItem('auspotyGoogleUser') || 'null'); } catch(e) { return null; }
+}
+
+// UPDATE PROFILE UI
+function updateProfileUI() {
+    var user = getGoogleUser();
+    var s = getSettings();
+    var name = user ? user.name : (s.profileName || 'Pengguna Auspoty');
+    // Custom photo selalu prioritas, baru Google photo
+    var customPhoto = localStorage.getItem('auspotyCustomPhoto');
+    var pic = customPhoto || (user ? user.picture : '');
+    var imgTag = pic ? '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '';
+    var initial = name.charAt(0).toUpperCase();
+
+    var pname = document.getElementById('settingsProfileName');
+    if (pname) pname.innerText = name;
+
+    var pav = document.getElementById('settingsAvatar');
+    if (pav) {
+        if (imgTag) { pav.innerHTML = imgTag; }
+        else { pav.innerHTML = ''; pav.innerText = initial; }
+    }
+    var hav = document.querySelector('.app-avatar');
+    if (hav) {
+        if (imgTag) { hav.innerHTML = imgTag; }
+        else { hav.innerHTML = ''; hav.innerText = initial; }
+    }
+}
 
 // INIT
 applyAllSettings();

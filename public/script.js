@@ -494,17 +494,36 @@ function makeTrackData(t) {
     const img = getHighResImage(t.thumbnail || t.img || '');
     return encodeURIComponent(JSON.stringify({ videoId: t.videoId, title: t.title, artist: t.artist || 'Unknown', img }));
 }
+
+// TRACK CACHE - simpan track object supaya onclick tidak perlu encode string panjang
+window._trackCache = window._trackCache || {};
+function _cacheTrack(t) {
+    const img = getHighResImage(t.thumbnail || t.img || '');
+    window._trackCache[t.videoId] = { videoId: t.videoId, title: t.title || '', artist: t.artist || 'Unknown', img };
+}
+function playMusicById(videoId) {
+    const t = window._trackCache[videoId];
+    if (t) {
+        playMusic(t.videoId, makeTrackData(t));
+    } else {
+        // fallback: coba play langsung dengan videoId saja
+        if (ytPlayer && ytPlayer.loadVideoById) {
+            document.getElementById('miniPlayer').style.display = 'flex';
+            ytPlayer.loadVideoById(videoId);
+        }
+    }
+}
 function renderVItem(t) {
-    const d = makeTrackData(t);
-    return '<div class="v-item" onclick="playMusic(\'' + t.videoId + '\',\'' + d + '\')">'+
+    _cacheTrack(t);
+    return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">'+
         '<img class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/48x48?text=music\'">'+
         '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div>'+
         '<svg class="dots-icon" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>'+
         '</div>';
 }
 function renderHCard(t) {
-    const d = makeTrackData(t);
-    return '<div class="h-card" onclick="playMusic(\'' + t.videoId + '\',\'' + d + '\')">'+
+    _cacheTrack(t);
+    return '<div class="h-card" onclick="playMusicById(\'' + t.videoId + '\')">'+
         '<img class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/140x140?text=music\'">'+
         '<div class="h-title">' + (t.title || '') + '</div>'+
         '<div class="h-sub">' + (t.artist || '') + '</div></div>';
