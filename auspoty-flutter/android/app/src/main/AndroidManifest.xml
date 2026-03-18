@@ -9,7 +9,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="Auspoty"
@@ -39,14 +38,7 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name="com.auspoty.app.MusicForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false"
-            android:process=":music" />
-
-        <!-- audio_service foreground service -->
+        <!-- audio_service foreground service untuk background audio -->
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:exported="true"
@@ -64,10 +56,6 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
-
-        <meta-data
-            android:name="com.ryanheise.audioservice.NOTIFICATION_CHANNEL_NAME"
-            android:value="Auspoty Music" />
 
     </application>
 

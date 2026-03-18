@@ -13,8 +13,6 @@ import 'package:http/http.dart' as http;
 import 'package:audio_service/audio_service.dart';
 import 'audio_handler.dart';
 
-const _musicChannel = MethodChannel('com.auspoty.app/music');
-
 // Global reference ke WebView controller
 InAppWebViewController? _globalWebController;
 bool _globalIsPlaying = false;
@@ -93,7 +91,8 @@ void _handleNotifAction(String? actionId) {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Init AudioService — ini yang bikin audio jalan di foreground service
+  // Init AudioService — foreground service native Android
+  // androidStopForegroundOnPause: false = audio TIDAK berhenti saat app di-background
   _audioHandler = await AudioService.init(
     builder: () => AuspotyAudioHandler(),
     config: AudioServiceConfig(
@@ -101,7 +100,6 @@ void main() async {
       androidNotificationChannelName: 'Auspoty Music',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: false,
-      notificationColor: const Color(0xFFa78bfa),
       androidNotificationIcon: 'mipmap/ic_launcher',
       androidShowNotificationBadge: false,
     ),
@@ -191,20 +189,14 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // audio_service handle background sendiri — tidak perlu intervensi
-    // Hanya pastikan engine tidak di-pause
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      _musicChannel.invokeMethod('resumeEngine').catchError((_) {});
-    }
-    if (state == AppLifecycleState.resumed) {
-      _musicChannel.invokeMethod('resumeEngine').catchError((_) {});
-      // Sync UI setelah kembali ke app
-      if (_nativeMode) {
-        _webViewController?.evaluateJavascript(source: '''
-          window._nativePlaying = ${_audioHandler.isPlaying};
-          if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(${_audioHandler.isPlaying});
-        ''');
-      }
+    // audio_service handle background sendiri via foreground service
+    // Tidak perlu intervensi lifecycle
+    if (state == AppLifecycleState.resumed && _nativeMode) {
+      // Sync UI play/pause saat kembali ke app
+      _webViewController?.evaluateJavascript(source: '''
+        window._nativePlaying = ${_audioHandler.isPlaying};
+        if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(${_audioHandler.isPlaying});
+      ''');
     }
   }
 
@@ -381,10 +373,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       _nowArtist = artist;
                       _globalIsPlaying = true;
                       WakelockPlus.enable();
-                      _musicChannel.invokeMethod('startMusicService', {
-                        'title': title,
-                        'artist': artist,
-                      }).catchError((_) {});
                     },
                   );
 

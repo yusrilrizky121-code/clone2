@@ -3,18 +3,22 @@ import 'package:just_audio/just_audio.dart';
 
 /// AudioHandler yang jalan di Android foreground service
 /// Audio tetap jalan saat app di-background atau screen off
-class AuspotyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
+class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
   final _player = AudioPlayer();
 
+  // Callbacks ke Flutter UI / WebView
+  Function()? onSkipToNext;
+  Function()? onSkipToPrevious;
+  Function()? onCompleted;
+
   AuspotyAudioHandler() {
-    // Forward player state ke audio_service
+    // Forward player state ke audio_service stream
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    // Saat lagu selesai — emit completed
+    // Saat lagu selesai
     _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
         onCompleted?.call();
-        stop();
       }
     });
   }
@@ -25,12 +29,9 @@ class AuspotyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
         MediaControl.skipToPrevious,
         _player.playing ? MediaControl.pause : MediaControl.play,
         MediaControl.skipToNext,
-        MediaControl.stop,
       ],
       systemActions: const {
         MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
       },
       androidCompactActionIndices: const [0, 1, 2],
       processingState: const {
@@ -73,7 +74,6 @@ class AuspotyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
 
   @override
   Future<void> skipToNext() async {
-    // Diteruskan ke WebView via callback
     onSkipToNext?.call();
   }
 
@@ -81,11 +81,6 @@ class AuspotyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
   Future<void> skipToPrevious() async {
     onSkipToPrevious?.call();
   }
-
-  // Callbacks ke Flutter UI
-  Function()? onSkipToNext;
-  Function()? onSkipToPrevious;
-  Function()? onCompleted;
 
   Duration get position => _player.position;
   Duration? get duration => _player.duration;
