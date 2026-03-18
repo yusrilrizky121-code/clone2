@@ -43,6 +43,7 @@
           };
           localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
           if (typeof updateProfileUI === 'function') updateProfileUI();
+          if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
           if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
         } catch(e) {
           console.error('Firebase login error:', e);
@@ -54,6 +55,7 @@
           await signOut(auth);
           localStorage.removeItem('auspotyGoogleUser');
           if (typeof updateProfileUI === 'function') updateProfileUI();
+          if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
           if (typeof showToast === 'function') showToast('Berhasil keluar');
         } catch(e) {}
       };
@@ -67,6 +69,7 @@
           };
           localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
           if (typeof updateProfileUI === 'function') updateProfileUI();
+          if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
         }
       });
 

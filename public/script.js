@@ -1268,18 +1268,24 @@ function updateProfileUI() {
     var user = getGoogleUser();
     var s = getSettings();
     var name = user ? user.name : (s.profileName || 'Pengguna Auspoty');
-    var pic = user ? user.picture : (localStorage.getItem('auspotyCustomPhoto') || '');
+    // Custom photo selalu prioritas, baru Google photo
+    var customPhoto = localStorage.getItem('auspotyCustomPhoto');
+    var pic = customPhoto || (user ? user.picture : '');
+    var imgTag = pic ? '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">' : '';
+    var initial = name.charAt(0).toUpperCase();
+
     var pname = document.getElementById('settingsProfileName');
     if (pname) pname.innerText = name;
+
     var pav = document.getElementById('settingsAvatar');
     if (pav) {
-        if (pic) { pav.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; }
-        else { pav.innerHTML = ''; pav.innerText = name.charAt(0).toUpperCase(); }
+        if (imgTag) { pav.innerHTML = imgTag; }
+        else { pav.innerHTML = ''; pav.innerText = initial; }
     }
     var hav = document.querySelector('.app-avatar');
     if (hav) {
-        if (pic) { hav.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; }
-        else { hav.innerHTML = ''; hav.innerText = name.charAt(0).toUpperCase(); }
+        if (imgTag) { hav.innerHTML = imgTag; }
+        else { hav.innerHTML = ''; hav.innerText = initial; }
     }
 }
 
