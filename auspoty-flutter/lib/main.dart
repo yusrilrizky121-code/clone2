@@ -60,6 +60,9 @@ void main() async {
 InAppWebViewController? _globalWebController;
 bool _globalIsPlaying = false;
 
+// KeepAlive token — WebView tidak di-dispose saat widget tree berubah
+final _webViewKeepAlive = InAppWebViewKeepAlive();
+
 void _handleNotifAction(String? actionId) {
   if (_globalWebController == null) return;
   switch (actionId) {
@@ -138,31 +141,23 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _wasInBackground = true;
-      // Inject JS sebelum app benar-benar background — resume AudioContext
+      // Paksa engine tetap resumed via native channel
+      _musicChannel.invokeMethod('resumeEngine').catchError((_) {});
+      // Resume AudioContext di WebView
       _webViewController?.evaluateJavascript(source: '''
         (function(){
           try {
-            if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
-              window._keepAliveCtx.resume();
-            }
-            // Pastikan oscillator tetap jalan
-            if(!window._keepAliveOsc && window._keepAliveCtx) {
-              var osc = window._keepAliveCtx.createOscillator();
-              var gain = window._keepAliveCtx.createGain();
-              gain.gain.value = 0.00001;
-              osc.connect(gain);
-              gain.connect(window._keepAliveCtx.destination);
-              osc.start();
-              window._keepAliveOsc = osc;
+            if(window._keepAliveCtx) {
+              if(window._keepAliveCtx.state === 'suspended') window._keepAliveCtx.resume();
             }
           } catch(e) {}
         })()
       ''');
     }
     if (state == AppLifecycleState.resumed) {
+      _musicChannel.invokeMethod('resumeEngine').catchError((_) {});
       if (_wasInBackground) {
         _wasInBackground = false;
-        // Resume AudioContext dan cek state player
         _webViewController?.evaluateJavascript(source: '''
           (function(){
             try {
@@ -473,6 +468,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
           child: Stack(
             children: [
               InAppWebView(
+                keepAlive: _webViewKeepAlive,
                 initialUrlRequest: URLRequest(
                   url: WebUri('https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app'),
                 ),
