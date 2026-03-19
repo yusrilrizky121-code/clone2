@@ -38,12 +38,29 @@
             </intent-filter>
         </activity>
 
-        <!-- Native ExoPlayer service — jalan independen dari Flutter engine -->
+        <!--
+            MusicPlayerService extend MediaBrowserServiceCompat — ini pattern yang dipakai
+            Metrolist, Spotify, YouTube Music untuk background audio yang proper.
+            intent-filter MediaBrowserService wajib ada supaya Android kenali sebagai media player.
+        -->
         <service
             android:name=".MusicPlayerService"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <!-- MediaButtonReceiver untuk handle tombol headset/bluetooth -->
+        <receiver
+            android:name="androidx.media.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

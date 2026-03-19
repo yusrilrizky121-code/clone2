@@ -41,37 +41,30 @@ class MainActivity : FlutterActivity() {
         methodChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "playUrl" -> {
-                    val url    = call.argument<String>("url") ?: ""
-                    val title  = call.argument<String>("title") ?: ""
-                    val artist = call.argument<String>("artist") ?: ""
+                    val url    = call.argument<String>("url")       ?: ""
+                    val title  = call.argument<String>("title")     ?: ""
+                    val artist = call.argument<String>("artist")    ?: ""
                     val thumb  = call.argument<String>("thumbnail") ?: ""
                     ensureServiceStarted()
-                    // Bind dulu kalau belum
-                    if (!serviceBound) {
+                    if (serviceBound) {
+                        musicService?.playUrl(url, title, artist, thumb)
+                    } else {
+                        // Bind dulu, play setelah connected
                         bindMusicService()
-                        // Delay sedikit lalu play
                         android.os.Handler(mainLooper).postDelayed({
                             musicService?.playUrl(url, title, artist, thumb)
-                        }, 300)
-                    } else {
-                        musicService?.playUrl(url, title, artist, thumb)
+                        }, 400)
                     }
                     result.success(null)
                 }
-                "pause" -> {
-                    musicService?.pause()
-                    result.success(null)
-                }
-                "resume" -> {
-                    musicService?.resume()
-                    result.success(null)
-                }
-                "seekTo" -> {
+                "pause"       -> { musicService?.pause();  result.success(null) }
+                "resume"      -> { musicService?.resume(); result.success(null) }
+                "seekTo"      -> {
                     val ms = call.argument<Int>("positionMs") ?: 0
                     musicService?.seekTo(ms.toLong())
                     result.success(null)
                 }
-                "isPlaying" -> result.success(musicService?.isPlaying() ?: false)
+                "isPlaying"   -> result.success(musicService?.isPlaying() ?: false)
                 "getPosition" -> result.success(musicService?.currentPosition()?.toInt() ?: 0)
                 "getDuration" -> result.success(musicService?.duration()?.toInt() ?: 0)
                 "stopService" -> {
@@ -108,7 +101,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun bindMusicService() {
-        val intent = Intent(this, MusicPlayerService::class.java)
-        bindService(intent, serviceConnection, BIND_AUTO_CREATE)
+        if (!serviceBound) {
+            val intent = Intent(this, MusicPlayerService::class.java)
+            bindService(intent, serviceConnection, BIND_AUTO_CREATE)
+        }
     }
 }
