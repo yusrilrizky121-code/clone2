@@ -182,7 +182,6 @@ function togglePlay() {
         ytPlayer.playVideo();
         try { if (window.flutter_inappwebview && currentTrack) window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } catch(e) {}
     }
-} else { ytPlayer.playVideo(); }
 }
 
 function updatePlayPauseBtn(playing) {
