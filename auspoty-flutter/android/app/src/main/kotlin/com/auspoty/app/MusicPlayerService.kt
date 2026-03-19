@@ -65,8 +65,9 @@ class MusicPlayerService : Service() {
     private var currentTitle  = "Auspoty"
     private var currentArtist = "Auspoty Music"
     private var currentVideoId = ""
+    private var currentImgUrl = ""
     private var isPlaying     = false
-    private var isNativePlaying = false  // true = MediaPlayer aktif
+    private var isNativePlaying = false
     private var currentArt: android.graphics.Bitmap? = null
 
     private val receiver = object : BroadcastReceiver() {
@@ -164,22 +165,30 @@ class MusicPlayerService : Service() {
     }
 
     fun updateTrackInfo(title: String, artist: String, playing: Boolean, imgUrl: String = "") {
-        currentTitle  = title.ifEmpty { "Auspoty" }
-        currentArtist = artist.ifEmpty { "Auspoty Music" }
-        isPlaying     = playing
+        currentTitle   = title.ifEmpty { "Auspoty" }
+        currentArtist  = artist.ifEmpty { "Auspoty Music" }
+        isPlaying      = playing
         if (playing) acquireWakeLock()
-        updateMediaSessionMeta()
-        updatePlaybackState()
-        if (imgUrl.isNotEmpty()) {
-            // Fetch album art di background, lalu update notif
+        // Reset art jika lagu baru
+        if (imgUrl.isNotEmpty() && imgUrl != currentImgUrl) {
+            currentImgUrl = imgUrl
+            currentArt = null  // clear dulu, fetch baru
+            updateMediaSessionMeta()
+            updatePlaybackState()
+            refreshNotif()  // tampil dulu tanpa gambar
             Thread {
                 val bmp = fetchBitmap(imgUrl)
                 if (bmp != null) {
                     currentArt = bmp
-                    android.os.Handler(android.os.Looper.getMainLooper()).post { refreshNotif() }
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        updateMediaSessionMeta()  // update dengan gambar
+                        refreshNotif()
+                    }
                 }
             }.start()
         } else {
+            updateMediaSessionMeta()
+            updatePlaybackState()
             refreshNotif()
         }
     }
@@ -357,18 +366,25 @@ class MusicPlayerService : Service() {
     }
 
     private fun updateMediaSessionMeta() {
-        mediaSession?.setMetadata(
-            MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
-                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
-                .build()
-        )
+        val builder = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, currentTitle)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, currentArtist)
+        if (currentImgUrl.isNotEmpty()) {
+            builder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, currentImgUrl)
+            builder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, currentImgUrl)
+        }
+        if (currentArt != null) {
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, currentArt)
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, currentArt)
+        }
+        mediaSession?.setMetadata(builder.build())
     }
 
     private fun updatePlaybackState() {
         val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         val pos = try { mediaPlayer?.currentPosition?.toLong() ?: PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN } catch (e: Exception) { PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN }
-        val dur = try { mediaPlayer?.duration?.toLong() ?: 0L } catch (e: Exception) { 0L }
         val speed = if (isPlaying) 1f else 0f
         mediaSession?.setPlaybackState(
             PlaybackStateCompat.Builder()
@@ -381,16 +397,6 @@ class MusicPlayerService : Service() {
                 )
                 .build()
         )
-        // Update metadata dengan durasi
-        if (dur > 0) {
-            mediaSession?.setMetadata(
-                android.support.v4.media.MediaMetadataCompat.Builder()
-                    .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
-                    .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
-                    .putLong(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION, dur)
-                    .build()
-            )
-        }
     }
 
     // ── Album Art ─────────────────────────────────────────────────────────────

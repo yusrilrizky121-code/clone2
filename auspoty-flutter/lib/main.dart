@@ -234,26 +234,18 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicPlaying',
                   callback: (args) async {
-                    final title   = args.isNotEmpty ? args[0].toString() : 'Auspoty';
-                    final artist  = args.length > 1 ? args[1].toString() : '';
-                    final videoId = args.length > 2 ? args[2].toString() : '';
+                    final title  = args.isNotEmpty ? args[0].toString() : 'Auspoty';
+                    final artist = args.length > 1 ? args[1].toString() : '';
+                    final imgUrl = args.length > 3 ? args[3].toString() : '';
                     WakelockPlus.enable();
-                    if (videoId.isNotEmpty) {
-                      // Putar via MediaPlayer native (background-safe)
-                      try {
-                        await _ch.invokeMethod('playNative', {
-                          'videoId': videoId,
-                          'title': title,
-                          'artist': artist,
-                        });
-                        _startProgressTimer();
-                      } catch (e) {
-                        // Fallback: update notif saja
-                        try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true}); } catch (_) {}
-                      }
-                    } else {
-                      try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true}); } catch (_) {}
-                    }
+                    try {
+                      await _ch.invokeMethod('updateTrack', {
+                        'title': title,
+                        'artist': artist,
+                        'isPlaying': true,
+                        'imgUrl': imgUrl,
+                      });
+                    } catch (_) {}
                   },
                 );
 
@@ -261,7 +253,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                   handlerName: 'onMusicPaused',
                   callback: (args) async {
                     _progressTimer?.cancel();
-                    try { await _ch.invokeMethod('pauseNative'); } catch (_) {}
                     try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
                   },
                 );
@@ -269,8 +260,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicResumed',
                   callback: (args) async {
-                    try { await _ch.invokeMethod('resumeNative'); } catch (_) {}
-                    _startProgressTimer();
+                    try { await _ch.invokeMethod('setPlaying', {'isPlaying': true}); } catch (_) {}
                   },
                 );
 
