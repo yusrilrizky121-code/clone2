@@ -26,6 +26,7 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
+  // Cara Musify: init AudioService di main()
   _audioHandler = await AudioService.init(
     builder: () => AuspotyAudioHandler(),
     config: const AudioServiceConfig(
@@ -34,6 +35,7 @@ void main() async {
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: false,
       notificationColor: Color(0xFFa78bfa),
+      androidNotificationIcon: 'mipmap/ic_launcher',
     ),
   );
 
@@ -70,27 +72,23 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Callback next/prev dari notifikasi
+    // Callback dari notifikasi → kirim ke JS
     _audioHandler.onSkipToNext = () {
-      _wvc?.evaluateJavascript(source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
+      _wvc?.evaluateJavascript(source:
+        "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
     };
     _audioHandler.onSkipToPrevious = () {
-      _wvc?.evaluateJavascript(source: "if(typeof playPrevSong==='function') playPrevSong();");
-    };
-    _audioHandler.onPlayPauseToggle = () {
-      _wvc?.evaluateJavascript(source: "(function(){ if(typeof togglePlay==='function') togglePlay(); })();");
+      _wvc?.evaluateJavascript(source:
+        "if(typeof playPrevSong==='function') playPrevSong();");
     };
 
-    // Update progress bar di JS setiap detik
+    // Update progress bar di JS setiap detik dari just_audio positionStream
     _positionSub = _audioHandler.positionStream.listen((pos) {
       final dur = _audioHandler.durationSeconds;
       if (dur > 0 && _wvc != null) {
         final posS = pos.inSeconds;
-        _wvc!.evaluateJavascript(source: """
-          (function(){
-            if(typeof window._updateNativeProgress==='function') window._updateNativeProgress($posS, $dur);
-          })();
-        """);
+        _wvc!.evaluateJavascript(source:
+          "if(typeof window._updateNativeProgress==='function') window._updateNativeProgress($posS,$dur);");
       }
     });
   }
@@ -104,9 +102,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      WakelockPlus.enable();
-    }
+    if (state == AppLifecycleState.paused) WakelockPlus.enable();
   }
 
   Future<bool> _onBack() async {
@@ -139,7 +135,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       return false;
     }
     if (!['view-home','view-search','view-library','view-settings'].contains(s)) {
-      await _wvc!.evaluateJavascript(source: "if(typeof switchView==='function') switchView('home');");
+      await _wvc!.evaluateJavascript(source:
+        "if(typeof switchView==='function') switchView('home');");
       return false;
     }
     final now = DateTime.now();
@@ -182,6 +179,39 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     }
   }
 
+  /// Fetch stream URL dari API lalu putar via just_audio
+  Future<void> _playNative(String videoId, String title, String artist) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$_base/api/stream?videoId=$videoId'),
+        headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36'},
+      ).timeout(const Duration(seconds: 25));
+
+      if (resp.statusCode != 200) return;
+
+      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(resp.body);
+      if (urlMatch == null) return;
+      final streamUrl = urlMatch.group(1)!.replaceAll(r'\/', '/');
+
+      final item = MediaItem(
+        id: videoId,
+        title: title.isEmpty ? 'Auspoty' : title,
+        artist: artist.isEmpty ? 'Auspoty Music' : artist,
+      );
+
+      await _audioHandler.playFromUrl(streamUrl, item);
+
+      // Beritahu JS playback sudah mulai
+      _wvc?.evaluateJavascript(source: """
+        (function(){
+          window._nativePlaying = true;
+          window._nativeLoading = false;
+          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
+        })();
+      """);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -217,7 +247,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
               onWebViewCreated: (c) {
                 _wvc = c;
 
-                // JS memanggil ini saat lagu mulai play
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicPlaying',
                   callback: (args) async {
@@ -225,24 +254,18 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                     final artist  = args.length > 1 ? args[1].toString() : '';
                     final videoId = args.length > 2 ? args[2].toString() : '';
                     WakelockPlus.enable();
-                    if (videoId.isNotEmpty) {
-                      await _playNative(videoId, title, artist);
-                    }
+                    if (videoId.isNotEmpty) await _playNative(videoId, title, artist);
                   },
                 );
 
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicPaused',
-                  callback: (args) async {
-                    await _audioHandler.pause();
-                  },
+                  callback: (args) async => await _audioHandler.pause(),
                 );
 
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicResumed',
-                  callback: (args) async {
-                    await _audioHandler.play();
-                  },
+                  callback: (args) async => await _audioHandler.play(),
                 );
 
                 c.addJavaScriptHandler(
@@ -372,41 +395,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     );
   }
 
-  /// Fetch stream URL dari API lalu putar via just_audio (background-safe)
-  Future<void> _playNative(String videoId, String title, String artist) async {
-    try {
-      final resp = await http.get(
-        Uri.parse('$_base/api/stream?videoId=$videoId'),
-        headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36'},
-      ).timeout(const Duration(seconds: 20));
-
-      if (resp.statusCode != 200) return;
-      final body = resp.body;
-      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(body);
-      if (urlMatch == null) return;
-      final streamUrl = urlMatch.group(1)!.replaceAll(r'\/', '/');
-
-      final item = MediaItem(
-        id: videoId,
-        title: title.isEmpty ? 'Auspoty' : title,
-        artist: artist.isEmpty ? 'Auspoty Music' : artist,
-      );
-
-      await _audioHandler.playFromUrl(streamUrl, item);
-
-      // Beritahu JS bahwa playback sudah mulai
-      _wvc?.evaluateJavascript(source: """
-        (function(){
-          window._nativePlaying = true;
-          window._nativeLoading = false;
-          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
-        })();
-      """);
-    } catch (e) {
-      // ignore
-    }
-  }
-
   Future<void> _inject(InAppWebViewController c) async {
     await c.evaluateJavascript(source: r"""
       (function(){
@@ -463,7 +451,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
           }
         };
 
-        // Update progress bar dari native
         window._updateNativeProgress = function(pos, dur){
           if(dur <= 0) return;
           var bar = document.getElementById('progressBar');
