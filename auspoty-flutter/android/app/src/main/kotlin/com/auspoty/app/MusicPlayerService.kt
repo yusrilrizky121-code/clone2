@@ -155,6 +155,12 @@ class MusicPlayerService : Service() {
         updateNotification()
     }
 
+    fun keepAlive() {
+        // Dipanggil saat app masuk background — pastikan wakelock aktif
+        acquireWakeLock()
+        Log.d(TAG, "keepAlive called, wakelock=${wakeLock?.isHeld}")
+    }
+
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == false) wakeLock?.acquire(6 * 60 * 60 * 1000L)
     }

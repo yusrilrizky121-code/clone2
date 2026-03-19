@@ -21,6 +21,9 @@ class MainActivity : FlutterActivity() {
     private var bound = false
     private var channel: MethodChannel? = null
 
+    // Flag: jika true, jangan pause WebView saat Activity pause
+    @Volatile var bgModeActive = false
+
     private val conn = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             service = (binder as MusicPlayerService.LocalBinder).getService()
@@ -39,20 +42,28 @@ class MainActivity : FlutterActivity() {
         channel!!.setMethodCallHandler { call, result ->
             val svc = service
             when (call.method) {
-                // Dipanggil dari Dart saat lagu mulai diputar
                 "updateTrack" -> {
-                    val title   = call.argument<String>("title")     ?: ""
-                    val artist  = call.argument<String>("artist")    ?: ""
+                    val title   = call.argument<String>("title")      ?: ""
+                    val artist  = call.argument<String>("artist")     ?: ""
                     val playing = call.argument<Boolean>("isPlaying") ?: true
+                    bgModeActive = true
                     svc?.updateTrackInfo(title, artist, playing)
                     result.success(null)
                 }
                 "setPlaying" -> {
                     val playing = call.argument<Boolean>("isPlaying") ?: false
+                    if (!playing) bgModeActive = false
                     svc?.setPlaying(playing)
                     result.success(null)
                 }
+                "keepAlive" -> {
+                    // Dipanggil saat app masuk background dengan bgMode aktif
+                    // Pastikan service tetap jalan dan wakelock aktif
+                    svc?.keepAlive()
+                    result.success(null)
+                }
                 "stopService" -> {
+                    bgModeActive = false
                     svc?.setPlaying(false)
                     result.success(null)
                 }
@@ -68,6 +79,21 @@ class MainActivity : FlutterActivity() {
         bindService(Intent(this, MusicPlayerService::class.java), conn, BIND_AUTO_CREATE)
     }
 
+    /**
+     * KUNCI UTAMA: Override onPause agar WebView tidak di-pause saat bgMode aktif.
+     * Secara default FlutterActivity memanggil webView.onPause() di sini,
+     * yang menyebabkan YouTube IFrame berhenti.
+     */
+    override fun onPause() {
+        if (bgModeActive) {
+            // Skip super.onPause() untuk Flutter engine agar WebView tidak di-pause
+            // Tapi tetap panggil Activity.onPause() untuk lifecycle yang benar
+            android.app.Activity::class.java.getMethod("onPause").invoke(this)
+        } else {
+            super.onPause()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (!bound) bindService(Intent(this, MusicPlayerService::class.java), conn, BIND_AUTO_CREATE)
@@ -79,10 +105,6 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
-    /**
-     * Saat tombol notifikasi ditekan → kirim ke Flutter via MethodChannel
-     * → Flutter evaluateJavascript ke WebView → ytPlayer play/pause/next/prev
-     */
     private fun setupServiceCallbacks() {
         MusicPlayerService.onPlayPause = {
             runOnUiThread { channel?.invokeMethod("onPlayPause", null) }
