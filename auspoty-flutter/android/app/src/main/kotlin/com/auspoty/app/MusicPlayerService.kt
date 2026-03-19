@@ -6,8 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -19,6 +17,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -29,24 +28,15 @@ import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.*
 
 /**
- * MusicPlayerService — Media3 MediaLibraryService (pattern Metrolist)
- * Pakai androidx.media3 bukan exoplayer2 lama.
- * MediaLibraryService = Android treat kita sebagai media player proper:
- * - Notifikasi media di lock screen & status bar
- * - Kontrol headset/bluetooth
- * - Audio focus benar
- * - Tidak di-kill saat background / swipe dari recents
+ * MusicPlayerService — Media3 MediaLibraryService
+ * Pattern Metrolist: onTaskRemoved hanya stop jika tidak playing
+ * DefaultMediaNotificationProvider = notifikasi media proper di lock screen
  */
 class MusicPlayerService : MediaLibraryService() {
 
     companion object {
-        const val CHANNEL_ID  = "auspoty_player"
-        const val NOTIF_ID    = 42
-        const val ACTION_PLAY  = "com.auspoty.app.PLAY"
-        const val ACTION_PAUSE = "com.auspoty.app.PAUSE"
-        const val ACTION_NEXT  = "com.auspoty.app.NEXT"
-        const val ACTION_PREV  = "com.auspoty.app.PREV"
-        const val ACTION_STOP  = "com.auspoty.app.STOP"
+        const val CHANNEL_ID = "auspoty_player"
+        const val NOTIF_ID   = 42
 
         var flutterChannel: MethodChannel? = null
         var instance: MusicPlayerService? = null
@@ -57,21 +47,16 @@ class MusicPlayerService : MediaLibraryService() {
     private var wakeLock: PowerManager.WakeLock? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var currentTitle  = "Auspoty"
-    private var currentArtist = ""
-    private var currentThumb  = ""
-
     inner class LocalBinder : Binder() {
         fun getService() = this@MusicPlayerService
     }
     private val binder = LocalBinder()
 
-    // MediaLibraryService wajib implement ini
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession = mediaSession
 
     override fun onBind(intent: Intent?): IBinder? {
         val superBind = super.onBind(intent)
-        return if (superBind != null) superBind else binder
+        return superBind ?: binder
     }
 
     override fun onCreate() {
@@ -79,34 +64,42 @@ class MusicPlayerService : MediaLibraryService() {
         instance = this
         createNotificationChannel()
 
-        // WakeLock — CPU tetap aktif
+        // WakeLock — CPU tetap aktif saat background
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         @Suppress("DEPRECATION")
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Auspoty::PlayerWakeLock")
         wakeLock?.setReferenceCounted(false)
 
-        // ExoPlayer Media3 dengan audio focus
+        // ExoPlayer dengan audio focus
         val audioAttr = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.CONTENT_TYPE_MUSIC)
             .build()
 
         player = ExoPlayer.Builder(this).build().apply {
-            setAudioAttributes(audioAttr, true)
+            setAudioAttributes(audioAttr, /* handleAudioFocus= */ true)
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     if (state == Player.STATE_ENDED) {
                         scope.launch { flutterChannel?.invokeMethod("onCompleted", null) }
                     }
                 }
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    // update notifikasi via MediaSession otomatis
-                }
             })
         }
 
-        // MediaLibrarySession — ini yang register ke Android sebagai media player proper
-        mediaSession = MediaLibrarySession.Builder(this, player,
+        // DefaultMediaNotificationProvider — ini kunci agar Android tahu
+        // service ini adalah media player aktif dan tidak di-kill
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setNotificationId(NOTIF_ID)
+                .setChannelId(CHANNEL_ID)
+                .setChannelName(R.string.app_name)
+                .build()
+        )
+
+        // MediaLibrarySession
+        mediaSession = MediaLibrarySession.Builder(
+            this, player,
             object : MediaLibrarySession.Callback {
                 override fun onGetLibraryRoot(
                     session: MediaLibrarySession,
@@ -133,7 +126,7 @@ class MusicPlayerService : MediaLibraryService() {
             )
             .build()
 
-        // Start foreground langsung saat onCreate — seperti Metrolist
+        // Start foreground awal dengan notifikasi minimal
         val notification = buildInitialNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
@@ -143,11 +136,6 @@ class MusicPlayerService : MediaLibraryService() {
     }
 
     fun playUrl(url: String, title: String, artist: String, thumbUrl: String) {
-        currentTitle  = title
-        currentArtist = artist
-        currentThumb  = thumbUrl
-
-        // Set MediaItem dengan metadata — ini yang bikin notifikasi tampil info lagu
         val mediaItem = MediaItem.Builder()
             .setUri(url)
             .setMediaMetadata(
@@ -176,20 +164,19 @@ class MusicPlayerService : MediaLibraryService() {
     fun duration()        = if (player.duration == C.TIME_UNSET) 0L else player.duration
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_PLAY  -> player.play()
-            ACTION_PAUSE -> player.pause()
-            ACTION_NEXT  -> scope.launch { flutterChannel?.invokeMethod("onNext", null) }
-            ACTION_PREV  -> scope.launch { flutterChannel?.invokeMethod("onPrev", null) }
-            ACTION_STOP  -> stopSelf()
-        }
+        super.onStartCommand(intent, flags, startId)
         return START_STICKY
     }
 
-    // Seperti Metrolist — onTaskRemoved hanya call super, tidak stop service
+    /**
+     * Pattern Metrolist: hanya stop jika tidak sedang playing.
+     * Jika musik sedang jalan, biarkan service tetap hidup.
+     */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-        // Tidak stop service — biarkan musik tetap jalan
+        if (!player.isPlaying) {
+            stopSelf()
+        }
+        // Jika playing — tidak stop, musik tetap jalan di background
     }
 
     override fun onDestroy() {
