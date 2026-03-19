@@ -25,7 +25,6 @@ class MainActivity : FlutterActivity() {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             musicService = (binder as MusicPlayerService.LocalBinder).getService()
             serviceBound = true
-            // Kasih channel ke service supaya bisa callback ke Flutter
             MusicPlayerService.flutterChannel = methodChannel
         }
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -40,37 +39,47 @@ class MainActivity : FlutterActivity() {
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         methodChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
+
+                // Flutter kirim videoId → service fetch URL sendiri (self-contained)
+                "playByVideoId" -> {
+                    val videoId = call.argument<String>("videoId") ?: ""
+                    val title   = call.argument<String>("title")   ?: ""
+                    val artist  = call.argument<String>("artist")  ?: ""
+                    val thumb   = call.argument<String>("thumbnail") ?: ""
+                    ensureServiceStarted()
+                    doWithService { it.playByVideoId(videoId, title, artist, thumb) }
+                    result.success(null)
+                }
+
+                // Flutter sudah punya URL → kirim langsung ke service (lebih cepat)
                 "playUrl" -> {
                     val url    = call.argument<String>("url")       ?: ""
                     val title  = call.argument<String>("title")     ?: ""
                     val artist = call.argument<String>("artist")    ?: ""
                     val thumb  = call.argument<String>("thumbnail") ?: ""
                     ensureServiceStarted()
-                    if (serviceBound) {
-                        musicService?.playUrl(url, title, artist, thumb)
-                    } else {
-                        // Bind dulu, play setelah connected
-                        bindMusicService()
-                        android.os.Handler(mainLooper).postDelayed({
-                            musicService?.playUrl(url, title, artist, thumb)
-                        }, 400)
-                    }
+                    doWithService { it.playDirectUrl(url, title, artist, thumb) }
                     result.success(null)
                 }
-                "pause"       -> { musicService?.pause();  result.success(null) }
-                "resume"      -> { musicService?.resume(); result.success(null) }
-                "seekTo"      -> {
+
+                "pause"  -> { doWithService { it.pause() };  result.success(null) }
+                "resume" -> { doWithService { it.resume() }; result.success(null) }
+
+                "seekTo" -> {
                     val ms = call.argument<Int>("positionMs") ?: 0
-                    musicService?.seekTo(ms.toLong())
+                    doWithService { it.seekTo(ms.toLong()) }
                     result.success(null)
                 }
+
                 "isPlaying"   -> result.success(musicService?.isPlaying() ?: false)
                 "getPosition" -> result.success(musicService?.currentPosition()?.toInt() ?: 0)
                 "getDuration" -> result.success(musicService?.duration()?.toInt() ?: 0)
+
                 "stopService" -> {
                     stopService(Intent(this, MusicPlayerService::class.java))
                     result.success(null)
                 }
+
                 else -> result.notImplemented()
             }
         }
@@ -91,6 +100,21 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
+    /**
+     * Jalankan aksi pada service.
+     * Jika belum bound, bind dulu lalu delay sedikit.
+     */
+    private fun doWithService(action: (MusicPlayerService) -> Unit) {
+        if (serviceBound && musicService != null) {
+            action(musicService!!)
+        } else {
+            bindMusicService()
+            android.os.Handler(mainLooper).postDelayed({
+                musicService?.let { action(it) }
+            }, 500)
+        }
+    }
+
     private fun ensureServiceStarted() {
         val intent = Intent(this, MusicPlayerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -102,8 +126,11 @@ class MainActivity : FlutterActivity() {
 
     private fun bindMusicService() {
         if (!serviceBound) {
-            val intent = Intent(this, MusicPlayerService::class.java)
-            bindService(intent, serviceConnection, BIND_AUTO_CREATE)
+            bindService(
+                Intent(this, MusicPlayerService::class.java),
+                serviceConnection,
+                BIND_AUTO_CREATE
+            )
         }
     }
 }

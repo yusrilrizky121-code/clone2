@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,52 +13,12 @@ import 'package:http/http.dart' as http;
 // MethodChannel ke MusicPlayerService (ExoPlayer native Kotlin)
 const _playerChannel = MethodChannel('com.auspoty.app/music');
 
-// Global WebView controller
-InAppWebViewController? _globalWebController;
-
 // KeepAlive — WebView tidak di-dispose
 final _webViewKeepAlive = InAppWebViewKeepAlive();
 
 bool _nativeMode = false;
 
 const _apiBase = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
-
-// Fetch stream URL dari Vercel backend
-Future<Map<String, dynamic>?> _fetchStreamUrl(String videoId) async {
-  try {
-    final resp = await http.post(
-      Uri.parse('$_apiBase/api/stream'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'videoId': videoId}),
-    ).timeout(const Duration(seconds: 30));
-    if (resp.statusCode == 200) {
-      final data = jsonDecode(resp.body) as Map<String, dynamic>;
-      if (data['status'] == 'success') return data;
-    }
-  } catch (_) {}
-  return null;
-}
-
-// Play via ExoPlayer native
-Future<bool> _playNative(String videoId, String title, String artist, String thumbnail) async {
-  try {
-    final data = await _fetchStreamUrl(videoId);
-    if (data == null) return false;
-
-    await _playerChannel.invokeMethod('playUrl', {
-      'url': data['url'] as String,
-      'title': (data['title'] as String?) ?? title,
-      'artist': (data['artist'] as String?) ?? artist,
-      'thumbnail': (data['thumbnail'] as String?) ?? thumbnail,
-    });
-    _nativeMode = true;
-    WakelockPlus.enable();
-    return true;
-  } catch (_) {
-    _nativeMode = false;
-    return false;
-  }
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -252,7 +211,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> {
                 ),
                 onWebViewCreated: (controller) {
                   _webViewController = controller;
-                  _globalWebController = controller;
 
                   // Terima callback dari Kotlin (next/prev/completed)
                   _playerChannel.setMethodCallHandler((call) async {
@@ -270,9 +228,13 @@ class _AuspotyWebViewState extends State<AuspotyWebView> {
                         controller.evaluateJavascript(source: '''
                           window._nativePlaying=false;
                           if(typeof isRepeat!=='undefined'&&isRepeat){
-                            window.flutter_inappwebview.callHandler('playNative',
-                              window.currentTrack?.videoId||'',window.currentTrack?.title||'',
-                              window.currentTrack?.artist||'',window.currentTrack?.img||'');
+                            if(window.currentTrack&&window.currentTrack.videoId){
+                              window.flutter_inappwebview.callHandler('playNative',
+                                window.currentTrack.videoId,
+                                window.currentTrack.title||'',
+                                window.currentTrack.artist||'',
+                                window.currentTrack.img||'');
+                            }
                           } else if(typeof playNextSimilarSong==='function'){
                             playNextSimilarSong();
                           }
@@ -281,6 +243,10 @@ class _AuspotyWebViewState extends State<AuspotyWebView> {
                     }
                   });
 
+                  // ============================================================
+                  // playNative: KIRIM videoId ke service, service fetch URL sendiri
+                  // Ini kunci background audio — tidak bergantung Flutter engine
+                  // ============================================================
                   controller.addJavaScriptHandler(
                     handlerName: 'playNative',
                     callback: (args) async {
@@ -291,16 +257,25 @@ class _AuspotyWebViewState extends State<AuspotyWebView> {
                       if (videoId.isEmpty) return;
 
                       controller.evaluateJavascript(source: "window._nativeLoading=true;");
-                      final ok = await _playNative(videoId, title, artist, thumbnail);
 
-                      if (ok) {
+                      try {
+                        // Kirim videoId ke service — service yang fetch URL sendiri
+                        await _playerChannel.invokeMethod('playByVideoId', {
+                          'videoId': videoId,
+                          'title': title,
+                          'artist': artist,
+                          'thumbnail': thumbnail,
+                        });
+                        _nativeMode = true;
+                        WakelockPlus.enable();
                         _startProgressTimer();
                         controller.evaluateJavascript(source: '''
                           window._nativeLoading=false;
                           window._nativePlaying=true;
                           if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
                         ''');
-                      } else {
+                      } catch (_) {
+                        _nativeMode = false;
                         controller.evaluateJavascript(source: '''
                           window._nativeLoading=false;
                           window._nativePlaying=false;
@@ -497,8 +472,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> {
     await controller.evaluateJavascript(source: '''
       (function(){
         window.AndroidBridge = {
-          onMusicPlay: function(t,a){ window.flutter_inappwebview.callHandler('onMusicPlay',t,a); },
-          onMusicPause: function(){ window.flutter_inappwebview.callHandler('onMusicPause'); },
           isAndroid: function(){ return true; },
           openDownload: function(videoId,title){ window.flutter_inappwebview.callHandler('downloadTrack',videoId,title||''); },
           logout: function(){
@@ -539,7 +512,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> {
           } else if(typeof _origSeekTo==='function'){ _origSeekTo(value); }
         };
 
-        console.log('[Auspoty] Bridge v6.0 ExoPlayer native ready');
+        console.log('[Auspoty] Bridge v7.0 self-contained ready');
       })();
     ''');
   }
