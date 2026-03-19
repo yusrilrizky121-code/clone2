@@ -40,56 +40,43 @@ class MainActivity : FlutterActivity() {
         methodChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
 
-                // Kirim Intent ke service — tidak butuh Flutter engine setelah ini
+                // Semua command dikirim via Intent — tidak butuh Flutter engine setelah ini
                 "playByVideoId" -> {
                     val videoId = call.argument<String>("videoId") ?: ""
                     val title   = call.argument<String>("title")   ?: ""
                     val artist  = call.argument<String>("artist")  ?: ""
                     val thumb   = call.argument<String>("thumbnail") ?: ""
-                    sendPlayIntent(videoId, title, artist, thumb)
+                    startServiceIntent(MusicPlayerService.ACTION_PLAY) {
+                        putExtra(MusicPlayerService.EXTRA_VIDEO_ID,  videoId)
+                        putExtra(MusicPlayerService.EXTRA_TITLE,     title)
+                        putExtra(MusicPlayerService.EXTRA_ARTIST,    artist)
+                        putExtra(MusicPlayerService.EXTRA_THUMBNAIL, thumb)
+                    }
                     result.success(null)
                 }
 
-                "playUrl" -> {
-                    val url    = call.argument<String>("url")       ?: ""
-                    val title  = call.argument<String>("title")     ?: ""
-                    val artist = call.argument<String>("artist")    ?: ""
-                    val thumb  = call.argument<String>("thumbnail") ?: ""
-                    // Untuk playUrl langsung, bind ke service
-                    ensureServiceStarted()
-                    doWithService { it.playUrl(url, title, artist, thumb) }
-                    result.success(null)
-                }
-
-                "pause"  -> {
-                    sendActionIntent(MusicPlayerService.ACTION_PAUSE)
-                    result.success(null)
-                }
-                "resume" -> {
-                    sendActionIntent(MusicPlayerService.ACTION_RESUME)
-                    result.success(null)
-                }
+                "pause"  -> { startServiceIntent(MusicPlayerService.ACTION_PAUSE);  result.success(null) }
+                "resume" -> { startServiceIntent(MusicPlayerService.ACTION_RESUME); result.success(null) }
+                "stopService" -> { startServiceIntent(MusicPlayerService.ACTION_STOP); result.success(null) }
 
                 "seekTo" -> {
                     val ms = call.argument<Int>("positionMs") ?: 0
-                    sendSeekIntent(ms.toLong())
+                    startServiceIntent(MusicPlayerService.ACTION_SEEK) {
+                        putExtra(MusicPlayerService.EXTRA_SEEK_MS, ms.toLong())
+                    }
                     result.success(null)
                 }
 
+                // Query state — pakai singleton instance (tidak butuh binding)
                 "isPlaying"   -> result.success(
-                    musicService?.isPlaying() ?: MusicPlayerService.instance?.isPlaying() ?: false
+                    MusicPlayerService.instance?.isPlaying() ?: false
                 )
                 "getPosition" -> result.success(
-                    (musicService?.getPosition() ?: MusicPlayerService.instance?.getPosition() ?: 0L).toInt()
+                    (MusicPlayerService.instance?.getPosition() ?: 0L).toInt()
                 )
                 "getDuration" -> result.success(
-                    (musicService?.getDuration() ?: MusicPlayerService.instance?.getDuration() ?: 0L).toInt()
+                    (MusicPlayerService.instance?.getDuration() ?: 0L).toInt()
                 )
-
-                "stopService" -> {
-                    sendActionIntent(MusicPlayerService.ACTION_STOP)
-                    result.success(null)
-                }
 
                 else -> result.notImplemented()
             }
@@ -99,14 +86,22 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WebView.setWebContentsDebuggingEnabled(false)
-        ensureServiceStarted()
+        // Start service saat app pertama kali buka
+        startServiceIntent(null)
         bindMusicService()
     }
 
     override fun onResume() {
         super.onResume()
+        // Re-set channel saat app kembali ke foreground
         MusicPlayerService.flutterChannel = methodChannel
         if (!serviceBound) bindMusicService()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Hapus channel saat app ke background — service tidak akan crash saat callback
+        MusicPlayerService.flutterChannel = null
     }
 
     override fun onDestroy() {
@@ -118,62 +113,14 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Kirim Intent ACTION_PLAY ke service.
-     * Intent-based — tidak butuh Flutter engine, tidak butuh binding.
-     * Ini yang membuat background audio bisa jalan.
+     * Kirim Intent ke service.
+     * Ini cara yang benar — tidak bergantung pada Flutter engine atau binding.
      */
-    private fun sendPlayIntent(videoId: String, title: String, artist: String, thumb: String) {
+    private fun startServiceIntent(action: String?, extras: (Intent.() -> Unit)? = null) {
         val intent = Intent(this, MusicPlayerService::class.java).apply {
-            action = MusicPlayerService.ACTION_PLAY
-            putExtra(MusicPlayerService.EXTRA_VIDEO_ID,  videoId)
-            putExtra(MusicPlayerService.EXTRA_TITLE,     title)
-            putExtra(MusicPlayerService.EXTRA_ARTIST,    artist)
-            putExtra(MusicPlayerService.EXTRA_THUMBNAIL, thumb)
+            if (action != null) this.action = action
+            extras?.invoke(this)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    private fun sendActionIntent(action: String) {
-        val intent = Intent(this, MusicPlayerService::class.java).apply {
-            this.action = action
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    private fun sendSeekIntent(ms: Long) {
-        val intent = Intent(this, MusicPlayerService::class.java).apply {
-            action = MusicPlayerService.ACTION_SEEK
-            putExtra(MusicPlayerService.EXTRA_SEEK_MS, ms)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    private fun doWithService(action: (MusicPlayerService) -> Unit) {
-        val svc = musicService ?: MusicPlayerService.instance
-        if (svc != null) {
-            action(svc)
-        } else {
-            bindMusicService()
-            android.os.Handler(mainLooper).postDelayed({
-                (musicService ?: MusicPlayerService.instance)?.let { action(it) }
-            }, 500)
-        }
-    }
-
-    private fun ensureServiceStarted() {
-        val intent = Intent(this, MusicPlayerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {

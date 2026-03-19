@@ -25,17 +25,6 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * MusicPlayerService — pure Service, self-contained.
- *
- * Cara kerja:
- * 1. Menerima Intent ACTION_PLAY dengan extras: videoId, title, artist, thumbnail
- * 2. Fetch stream URL sendiri via HTTP ke Vercel API (tidak butuh Flutter engine)
- * 3. ExoPlayer play audio — tetap jalan saat app di-background/swipe
- *
- * Tidak ada dependency ke Flutter MethodChannel untuk trigger play.
- * Flutter hanya dipakai untuk callback (onCompleted) saat app di-foreground.
- */
 class MusicPlayerService : Service() {
 
     companion object {
@@ -44,21 +33,19 @@ class MusicPlayerService : Service() {
         const val API_BASE     = "https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app"
         const val TAG          = "MusicPlayerService"
 
-        // Intent actions
         const val ACTION_PLAY   = "com.auspoty.app.PLAY"
         const val ACTION_PAUSE  = "com.auspoty.app.PAUSE"
         const val ACTION_RESUME = "com.auspoty.app.RESUME"
         const val ACTION_STOP   = "com.auspoty.app.STOP"
         const val ACTION_SEEK   = "com.auspoty.app.SEEK"
 
-        // Intent extras
         const val EXTRA_VIDEO_ID  = "videoId"
         const val EXTRA_TITLE     = "title"
         const val EXTRA_ARTIST    = "artist"
         const val EXTRA_THUMBNAIL = "thumbnail"
         const val EXTRA_SEEK_MS   = "seekMs"
 
-        // Singleton untuk akses dari MainActivity
+        // Flutter channel — hanya dipakai saat app di-foreground
         var flutterChannel: MethodChannel? = null
         var instance: MusicPlayerService? = null
     }
@@ -69,8 +56,8 @@ class MusicPlayerService : Service() {
 
     private var currentTitle  = "Auspoty"
     private var currentArtist = ""
+    private var currentVideoId = ""
 
-    // Binder untuk MainActivity bind ke service
     inner class LocalBinder : Binder() {
         fun getService() = this@MusicPlayerService
     }
@@ -83,13 +70,11 @@ class MusicPlayerService : Service() {
         instance = this
         createNotificationChannel()
 
-        // WakeLock — CPU tetap aktif saat layar mati
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         @Suppress("DEPRECATION")
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Auspoty::PlayerWakeLock")
         wakeLock?.setReferenceCounted(false)
 
-        // ExoPlayer setup
         player = ExoPlayer.Builder(this).build().apply {
             setAudioAttributes(
                 AudioAttributes.Builder()
@@ -101,48 +86,63 @@ class MusicPlayerService : Service() {
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     if (state == Player.STATE_ENDED) {
-                        scope.launch {
-                            // Callback ke Flutter jika engine aktif
-                            flutterChannel?.invokeMethod("onCompleted", null)
+                        // Hanya callback ke Flutter jika channel tersedia (app di-foreground)
+                        val ch = flutterChannel
+                        if (ch != null) {
+                            scope.launch { ch.invokeMethod("onCompleted", null) }
+                        }
+                        // Lepas wakelock saat selesai
+                        if (wakeLock?.isHeld == true) {
+                            try { wakeLock?.release() } catch (_: Exception) {}
                         }
                     }
                 }
             })
         }
 
-        // Langsung start foreground
         startForegroundCompat(buildNotification("Auspoty", "Siap memutar musik"))
         Log.d(TAG, "Service created")
     }
 
-    /**
-     * Semua perintah masuk via Intent — tidak butuh Flutter engine sama sekali.
-     * Ini yang membuat background audio bisa jalan.
-     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_PLAY -> {
                 val videoId  = intent.getStringExtra(EXTRA_VIDEO_ID)  ?: return START_STICKY
                 val title    = intent.getStringExtra(EXTRA_TITLE)     ?: ""
                 val artist   = intent.getStringExtra(EXTRA_ARTIST)    ?: ""
                 val thumbUrl = intent.getStringExtra(EXTRA_THUMBNAIL) ?: ""
+                currentVideoId = videoId
                 playByVideoId(videoId, title, artist, thumbUrl)
             }
-            ACTION_PAUSE  -> pausePlayer()
-            ACTION_RESUME -> resumePlayer()
-            ACTION_STOP   -> { stopPlayer(); stopSelf() }
+            ACTION_PAUSE  -> {
+                player.pause()
+                updateNotification(currentTitle, currentArtist)
+            }
+            ACTION_RESUME -> {
+                player.play()
+                updateNotification(currentTitle, currentArtist)
+            }
+            ACTION_STOP   -> {
+                player.stop()
+                player.clearMediaItems()
+                if (wakeLock?.isHeld == true) try { wakeLock?.release() } catch (_: Exception) {}
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
             ACTION_SEEK   -> {
                 val ms = intent.getLongExtra(EXTRA_SEEK_MS, -1L)
                 if (ms >= 0) player.seekTo(ms)
+            }
+            else -> {
+                // Service di-restart oleh Android (START_STICKY) — tidak ada action
+                // Biarkan saja, ExoPlayer masih punya state
+                Log.d(TAG, "Service restarted by Android (no action)")
             }
         }
         return START_STICKY
     }
 
-    /**
-     * Fetch stream URL dari Vercel API, lalu play.
-     * Semua di background thread — tidak butuh Flutter engine.
-     */
     private fun playByVideoId(videoId: String, title: String, artist: String, thumbUrl: String) {
         currentTitle  = title.ifEmpty { "Auspoty" }
         currentArtist = artist
@@ -150,17 +150,14 @@ class MusicPlayerService : Service() {
 
         scope.launch(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Fetching stream URL for: $videoId")
+                Log.d(TAG, "Fetching stream URL: $videoId")
                 val streamUrl = fetchStreamUrl(videoId)
-                if (streamUrl != null) {
-                    Log.d(TAG, "Got URL, playing")
-                    withContext(Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
+                    if (streamUrl != null) {
                         playUrl(streamUrl, title, artist, thumbUrl)
-                    }
-                } else {
-                    Log.e(TAG, "fetchStreamUrl returned null")
-                    withContext(Dispatchers.Main) {
-                        startForegroundCompat(buildNotification(currentTitle, "Gagal memuat"))
+                    } else {
+                        Log.e(TAG, "Stream URL null for $videoId")
+                        updateNotification(currentTitle, "Gagal memuat audio")
                     }
                 }
             } catch (e: Exception) {
@@ -176,7 +173,7 @@ class MusicPlayerService : Service() {
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Accept", "application/json")
-            conn.doOutput      = true
+            conn.doOutput       = true
             conn.connectTimeout = 30_000
             conn.readTimeout    = 60_000
 
@@ -194,7 +191,10 @@ class MusicPlayerService : Service() {
                     Log.e(TAG, "API error: ${json.optString("message")}")
                     null
                 }
-            } else null
+            } else {
+                Log.e(TAG, "HTTP $code")
+                null
+            }
         } catch (e: Exception) {
             Log.e(TAG, "fetchStreamUrl: ${e.message}")
             null
@@ -222,28 +222,39 @@ class MusicPlayerService : Service() {
         player.prepare()
         player.play()
 
+        // Acquire wakelock — CPU tetap aktif saat layar mati
         if (wakeLock?.isHeld == false) wakeLock?.acquire(6 * 60 * 60 * 1000L)
         startForegroundCompat(buildNotification(currentTitle, currentArtist))
         Log.d(TAG, "Playing: $currentTitle")
     }
 
-    fun pausePlayer()  { player.pause() }
-    fun resumePlayer() { player.play() }
-    fun stopPlayer()   { player.stop(); player.clearMediaItems() }
-    fun seekTo(ms: Long) { player.seekTo(ms) }
+    // Akses langsung dari MainActivity (saat bound)
+    fun pausePlayer()    = player.pause()
+    fun resumePlayer()   = player.play()
     fun isPlaying()      = player.isPlaying
     fun getPosition()    = player.currentPosition
     fun getDuration()    = if (player.duration == C.TIME_UNSET) 0L else player.duration
+    fun seekTo(ms: Long) = player.seekTo(ms)
 
     /**
-     * Saat app di-swipe dari recents:
-     * - Musik playing → biarkan jalan
-     * - Tidak playing → stop service
+     * KRITIS: stopWithTask="false" di manifest + override ini
+     * memastikan service tidak mati saat app di-swipe dari recents.
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.d(TAG, "onTaskRemoved, isPlaying=${player.isPlaying}")
-        if (!player.isPlaying) stopSelf()
-        // Tidak call super — cegah Android auto-stop
+        Log.d(TAG, "onTaskRemoved — isPlaying=${player.isPlaying}")
+        if (player.isPlaying) {
+            // Musik sedang jalan — jangan stop, restart jika perlu
+            val restartIntent = Intent(applicationContext, MusicPlayerService::class.java)
+            val pi = PendingIntent.getService(
+                applicationContext, 1, restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = getSystemService(ALARM_SERVICE) as android.app.AlarmManager
+            am.set(android.app.AlarmManager.ELAPSED_REALTIME, 1000, pi)
+        } else {
+            stopSelf()
+        }
+        // Tidak call super
     }
 
     override fun onDestroy() {
@@ -253,6 +264,11 @@ class MusicPlayerService : Service() {
         if (wakeLock?.isHeld == true) try { wakeLock?.release() } catch (_: Exception) {}
         instance = null
         super.onDestroy()
+    }
+
+    private fun updateNotification(title: String, text: String) {
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_ID, buildNotification(title, text))
     }
 
     private fun startForegroundCompat(notification: Notification) {
