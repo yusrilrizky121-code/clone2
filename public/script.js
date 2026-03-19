@@ -25,9 +25,6 @@ let songHistory = [];
 let isPlaying = false;
 let currentTrack = null;
 let progressInterval = null;
-window._nativePlaying = false;
-window._nativeLoading = false;
-window._nativePaused = false;
 
 // YOUTUBE PLAYER (fallback web/PWA)
 let ytPlayer;
@@ -38,7 +35,6 @@ function onYouTubeIframeAPIReady() {
     });
 }
 function onPlayerStateChange(event) {
-    if (window._nativePlaying || window._nativeLoading) return;
     const playPath = 'M8 5v14l11-7z', pausePath = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
     const mainBtn = document.getElementById('mainPlayBtn'), miniBtn = document.getElementById('miniPlayBtn');
     if (event.data == YT.PlayerState.PLAYING) {
@@ -47,11 +43,14 @@ function onPlayerStateChange(event) {
         if (miniBtn) miniBtn.innerHTML = '<path d="' + pausePath + '"/>';
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+        try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } } catch(e) {}
+        try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } } catch(e) {}
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + playPath + '"/>';
         stopProgressBar();
+        try { if (window.flutter_inappwebview) { window.flutter_inappwebview.callHandler('onMusicPaused'); } } catch(e) {}
     } else if (event.data == YT.PlayerState.ENDED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
@@ -124,8 +123,7 @@ function getHighResImage(url) {
 
 // ============================================================
 // PLAY MUSIC — fungsi utama
-// Di APK Android: AndroidBridge.playNative -> ExoPlayer native (background-safe)
-// Di web/PWA: ytPlayer (YouTube IFrame)
+// Background audio dijaga oleh foreground service Android
 // ============================================================
 function playMusic(videoId, encodedData) {
     currentTrack = JSON.parse(decodeURIComponent(encodedData));
@@ -157,20 +155,8 @@ function playMusic(videoId, encodedData) {
     document.getElementById('currentTime').innerText = '0:00';
     document.getElementById('totalTime').innerText = '0:00';
 
-    // *** KUNCI BACKGROUND AUDIO ***
-    if (window.AndroidBridge && typeof window.AndroidBridge.playNative === 'function') {
-        if (ytPlayer && ytPlayer.stopVideo) try { ytPlayer.stopVideo(); } catch(e) {}
-        window._nativePlaying = false;
-        window._nativeLoading = true;
-        window._nativePaused = false;
-        isPlaying = true;
-        updatePlayPauseBtn(true);
-        window.AndroidBridge.playNative(videoId, currentTrack.title || '', currentTrack.artist || '', currentTrack.img || '');
-    } else {
-        window._nativePlaying = false;
-        window._nativeLoading = false;
-        if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
-    }
+    // Putar via ytPlayer — background audio dijaga oleh foreground service
+    if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
 
     setTimeout(() => {
         if (currentTrack && _autoQueue.length < 2) prefetchNextSongs(currentTrack.artist, currentTrack.videoId);
@@ -179,24 +165,8 @@ function playMusic(videoId, encodedData) {
 
 // TOGGLE PLAY
 function togglePlay() {
-    if (window._nativePlaying) {
-        if (window.AndroidBridge && typeof window.AndroidBridge.pauseNative === 'function') window.AndroidBridge.pauseNative();
-        window._nativePlaying = false;
-        window._nativePaused = true;
-        isPlaying = false;
-        updatePlayPauseBtn(false);
-    } else if (window._nativePaused) {
-        if (window.AndroidBridge && typeof window.AndroidBridge.resumeNative === 'function') window.AndroidBridge.resumeNative();
-        window._nativePlaying = true;
-        window._nativePaused = false;
-        isPlaying = true;
-        updatePlayPauseBtn(true);
-    } else if (window._nativeLoading) {
-        // masih loading, abaikan
-    } else {
-        if (!ytPlayer) return;
-        if (isPlaying) { ytPlayer.pauseVideo(); } else { ytPlayer.playVideo(); }
-    }
+    if (!ytPlayer) return;
+    if (isPlaying) { ytPlayer.pauseVideo(); } else { ytPlayer.playVideo(); }
 }
 
 function updatePlayPauseBtn(playing) {
@@ -212,8 +182,7 @@ function minimizePlayer() { document.getElementById('playerModal').style.display
 function startProgressBar() {
     stopProgressBar();
     progressInterval = setInterval(() => {
-        if (window._nativePlaying || window._nativeLoading) return;
-        if (ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getDuration) {
+            if (ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getDuration) {
             const cur = ytPlayer.getCurrentTime(), dur = ytPlayer.getDuration();
             if (dur > 0) {
                 const pct = (cur / dur) * 100;
@@ -227,15 +196,9 @@ function startProgressBar() {
 }
 function stopProgressBar() { clearInterval(progressInterval); }
 function seekTo(value) {
-    if (window._nativePlaying || window._nativeLoading || window._nativePaused) {
-        if (window.AndroidBridge && typeof window.AndroidBridge.seekNative === 'function') window.AndroidBridge.seekNative(value);
-        return;
-    }
-    if (ytPlayer && ytPlayer.getDuration) {
-        ytPlayer.seekTo((value / 100) * ytPlayer.getDuration(), true);
-        const bar = document.getElementById('progressBar');
-        if (bar) bar.style.background = 'linear-gradient(to right, white ' + value + '%, rgba(255,255,255,0.2) ' + value + '%)';
-    }
+    if (!ytPlayer) return;
+    const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+    if (dur > 0) ytPlayer.seekTo(value / 100 * dur, true);
 }
 function formatTime(sec) {
     const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
@@ -292,16 +255,7 @@ function startLyricsScroll() {
     stopLyricsScroll();
     lyricsScrollInterval = setInterval(function() {
         var cur = 0, dur = 0;
-        if (window._nativePlaying || window._nativePaused) {
-            const bar = document.getElementById('progressBar');
-            const tt = document.getElementById('totalTime');
-            if (bar && tt) {
-                const pct = parseFloat(bar.value) || 0;
-                const parts = (tt.innerText || '0:00').split(':');
-                dur = (parseInt(parts[0]||0) * 60) + parseInt(parts[1]||0);
-                cur = (pct / 100) * dur;
-            }
-        } else if (ytPlayer && ytPlayer.getCurrentTime) {
+        if (ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
             dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
         }
