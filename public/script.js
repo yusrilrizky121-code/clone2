@@ -43,7 +43,7 @@ function onPlayerStateChange(event) {
         if (miniBtn) miniBtn.innerHTML = '<path d="' + pausePath + '"/>';
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-        try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } } catch(e) {}
+        try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||'', currentTrack.videoId||''); } } catch(e) {}
         _startBgKeepAlive();
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
@@ -162,7 +162,7 @@ function playMusic(videoId, encodedData) {
         try {
             if (window.flutter_inappwebview && currentTrack) {
                 window.flutter_inappwebview.callHandler('onMusicPlaying',
-                    currentTrack.title||'Auspoty', currentTrack.artist||'');
+                    currentTrack.title||'Auspoty', currentTrack.artist||'', videoId||'');
             }
         } catch(e) {}
     }
@@ -180,7 +180,7 @@ function togglePlay() {
         try { if (window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
     } else {
         ytPlayer.playVideo();
-        try { if (window.flutter_inappwebview && currentTrack) window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } catch(e) {}
+        try { if (window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
     }
 }
 
