@@ -14,7 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     companion object {
-        const val CHANNEL = "com.auspoty.app/player"
+        const val CHANNEL = "com.auspoty.app/music"
     }
 
     private var service: MusicPlayerService? = null
@@ -39,35 +39,23 @@ class MainActivity : FlutterActivity() {
         channel!!.setMethodCallHandler { call, result ->
             val svc = service
             when (call.method) {
-                // Dipanggil dari Dart saat JS minta play lagu
-                "play" -> {
-                    val videoId   = call.argument<String>("videoId")   ?: ""
-                    val title     = call.argument<String>("title")     ?: ""
-                    val artist    = call.argument<String>("artist")    ?: ""
-                    val thumbnail = call.argument<String>("thumbnail") ?: ""
-                    if (videoId.isNotEmpty()) {
-                        startServiceSafe(Intent(this, MusicPlayerService::class.java).apply {
-                            action = MusicPlayerService.ACTION_PLAY
-                            putExtra(MusicPlayerService.EXTRA_VIDEO_ID,  videoId)
-                            putExtra(MusicPlayerService.EXTRA_TITLE,     title)
-                            putExtra(MusicPlayerService.EXTRA_ARTIST,    artist)
-                            putExtra(MusicPlayerService.EXTRA_THUMBNAIL, thumbnail)
-                        })
-                    }
+                // Dipanggil dari Dart saat lagu mulai diputar
+                "updateTrack" -> {
+                    val title   = call.argument<String>("title")     ?: ""
+                    val artist  = call.argument<String>("artist")    ?: ""
+                    val playing = call.argument<Boolean>("isPlaying") ?: true
+                    svc?.updateTrackInfo(title, artist, playing)
                     result.success(null)
                 }
-                "pause"  -> { svc?.pausePlayer();  result.success(null) }
-                "resume" -> { svc?.resumePlayer(); result.success(null) }
-                "togglePlayPause" -> { svc?.togglePlayPause(); result.success(null) }
-                "stop"   -> { svc?.stopPlayer();   result.success(null) }
-                "seekTo" -> {
-                    val ms = call.argument<Int>("positionMs") ?: 0
-                    svc?.seekTo(ms.toLong())
+                "setPlaying" -> {
+                    val playing = call.argument<Boolean>("isPlaying") ?: false
+                    svc?.setPlaying(playing)
                     result.success(null)
                 }
-                "getPosition" -> result.success((svc?.getPosition() ?: 0L).toInt())
-                "getDuration" -> result.success((svc?.getDuration() ?: 0L).toInt())
-                "isPlaying"   -> result.success(svc?.isCurrentlyPlaying() ?: false)
+                "stopService" -> {
+                    svc?.setPlaying(false)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -92,8 +80,8 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Set callback ke service — saat tombol notifikasi ditekan,
-     * kirim ke Flutter via MethodChannel → Flutter evaluateJavascript ke WebView.
+     * Saat tombol notifikasi ditekan → kirim ke Flutter via MethodChannel
+     * → Flutter evaluateJavascript ke WebView → ytPlayer play/pause/next/prev
      */
     private fun setupServiceCallbacks() {
         MusicPlayerService.onPlayPause = {
@@ -104,9 +92,6 @@ class MainActivity : FlutterActivity() {
         }
         MusicPlayerService.onPrev = {
             runOnUiThread { channel?.invokeMethod("onPrev", null) }
-        }
-        MusicPlayerService.onCompleted = {
-            runOnUiThread { channel?.invokeMethod("onCompleted", null) }
         }
     }
 
