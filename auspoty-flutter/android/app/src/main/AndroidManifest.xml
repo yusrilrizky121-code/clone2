@@ -39,28 +39,19 @@
         </activity>
 
         <!--
-            MusicPlayerService extend MediaBrowserServiceCompat — ini pattern yang dipakai
-            Metrolist, Spotify, YouTube Music untuk background audio yang proper.
-            intent-filter MediaBrowserService wajib ada supaya Android kenali sebagai media player.
+            MusicPlayerService extend MediaLibraryService (Media3) — pattern Metrolist.
+            Tidak ada stopWithTask — service tetap jalan saat app di-swipe dari recents.
         -->
         <service
             android:name=".MusicPlayerService"
             android:exported="true"
-            android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false">
+            android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
-
-        <!-- MediaButtonReceiver untuk handle tombol headset/bluetooth -->
-        <receiver
-            android:name="androidx.media.session.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
 
     </application>
 

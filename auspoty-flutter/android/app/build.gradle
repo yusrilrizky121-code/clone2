@@ -68,9 +68,11 @@ flutter {
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
     implementation 'androidx.multidex:multidex:2.0.1'
-    // MediaBrowserServiceCompat + MediaSessionCompat (pattern Metrolist)
-    implementation 'androidx.media:media:1.7.0'
-    // ExoPlayer
-    implementation 'com.google.android.exoplayer:exoplayer-core:2.19.1'
-    implementation 'com.google.android.exoplayer:extension-mediasession:2.19.1'
+    // Media3 — pattern Metrolist (ganti ExoPlayer2 lama)
+    implementation 'androidx.media3:media3-exoplayer:1.3.1'
+    implementation 'androidx.media3:media3-session:1.3.1'
+    implementation 'androidx.media3:media3-common:1.3.1'
+    implementation 'androidx.media3:media3-ui:1.3.1'
+    // Guava untuk ListenableFuture di MediaLibrarySession.Callback
+    implementation 'com.google.guava:guava:33.1.0-android'
 }
