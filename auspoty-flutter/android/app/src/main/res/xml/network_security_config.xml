@@ -5,6 +5,7 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <!-- Allow HTTPS ke semua domain yang dibutuhkan -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">youtube.com</domain>
         <domain includeSubdomains="true">ytimg.com</domain>
@@ -13,7 +14,5 @@
         <domain includeSubdomains="true">vercel.app</domain>
         <domain includeSubdomains="true">firebaseapp.com</domain>
         <domain includeSubdomains="true">firestore.googleapis.com</domain>
-        <domain includeSubdomains="true">gstatic.com</domain>
-        <domain includeSubdomains="true">google.com</domain>
     </domain-config>
 </network-security-config>

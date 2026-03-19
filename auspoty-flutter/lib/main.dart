@@ -1,22 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
-import 'audio_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
 
+const _ch = MethodChannel('com.auspoty.app/music');
 final _keepAlive = InAppWebViewKeepAlive();
 const _base = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
-
-late AuspotyAudioHandler _audioHandler;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,20 +22,6 @@ void main() async {
     systemNavigationBarColor: Color(0xFF0a0a0f),
     systemNavigationBarIconBrightness: Brightness.light,
   ));
-
-  // Fix: AudioServiceConfig tidak boleh const karena Color bukan const
-  _audioHandler = await AudioService.init(
-    builder: () => AuspotyAudioHandler(),
-    config: AudioServiceConfig(
-      androidNotificationChannelId: 'com.auspoty.app.audio',
-      androidNotificationChannelName: 'Auspoty Music',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: false,
-      notificationColor: const Color(0xFFa78bfa),
-      androidNotificationIcon: 'mipmap/ic_launcher',
-    ),
-  );
-
   runApp(const AuspotyApp());
 }
 
@@ -49,8 +31,9 @@ class AuspotyApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         title: 'Auspoty',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: Color(0xFFa78bfa)),
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFa78bfa), brightness: Brightness.dark),
+          useMaterial3: true,
         ),
         home: const AuspotyWebView(),
       );
@@ -66,81 +49,77 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   InAppWebViewController? _wvc;
   bool _loading = true;
   DateTime? _lastBack;
-  StreamSubscription? _posSub;
+  Timer? _progressTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    _audioHandler.onSkipToNext = () => _wvc?.evaluateJavascript(
-        source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
-    _audioHandler.onSkipToPrevious = () => _wvc?.evaluateJavascript(
-        source: "if(typeof playPrevSong==='function') playPrevSong();");
-
-    // Update progress bar di JS setiap detik
-    _posSub = _audioHandler.positionStream.listen((pos) {
-      final dur = _audioHandler.durationSeconds;
-      if (dur > 0 && _wvc != null) {
-        final s = pos.inSeconds;
-        _wvc!.evaluateJavascript(source:
-          "if(typeof window._updateNativeProgress==='function') window._updateNativeProgress($s,$dur);");
-      }
-    });
+    _ch.setMethodCallHandler(_onNativeCall);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _posSub?.cancel();
+    _progressTimer?.cancel();
     super.dispose();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s == AppLifecycleState.paused) WakelockPlus.enable();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      // Saat background: MediaPlayer tetap jalan di service
+      // Hentikan progress timer (tidak perlu update UI saat background)
+      _progressTimer?.cancel();
+      try { _ch.invokeMethod('keepAlive'); } catch (_) {}
+      WakelockPlus.enable();
+    }
+    if (state == AppLifecycleState.resumed) {
+      // Saat kembali ke foreground: restart progress timer
+      _startProgressTimer();
+    }
   }
 
-  Future<void> _playNative(String videoId, String title, String artist) async {
-    try {
-      // Fetch stream URL dari API
-      final resp = await http.get(
-        Uri.parse('$_base/api/stream?videoId=$videoId'),
-        headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
-      ).timeout(const Duration(seconds: 30));
+  Future<dynamic> _onNativeCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onPlayPause':
+        // Toggle play/pause di JS (untuk update UI)
+        await _wvc?.evaluateJavascript(
+            source: "(function(){ if(typeof togglePlay==='function') togglePlay(); })();");
+        break;
+      case 'onNext':
+        await _wvc?.evaluateJavascript(
+            source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
+        break;
+      case 'onPrev':
+        await _wvc?.evaluateJavascript(
+            source: "if(typeof playPrevSong==='function') playPrevSong();");
+        break;
+    }
+  }
 
-      if (resp.statusCode != 200) return;
-
-      // Parse JSON dengan dart:convert (lebih reliable dari regex)
-      final Map<String, dynamic> data = jsonDecode(resp.body);
-      if (data['status'] != 'success') return;
-
-      final streamUrl = (data['url'] as String).replaceAll(r'\/', '/');
-      final rawHeaders = data['headers'] as Map<String, dynamic>? ?? {};
-      final streamHeaders = rawHeaders.map((k, v) => MapEntry(k, v.toString()));
-
-      // Fallback headers
-      if (streamHeaders.isEmpty) {
-        streamHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
-        streamHeaders['Accept'] = '*/*';
-        streamHeaders['Accept-Language'] = 'en-us,en;q=0.5';
-      }
-
-      final item = MediaItem(
-        id: videoId,
-        title: title.isEmpty ? 'Auspoty' : title,
-        artist: artist.isEmpty ? 'Auspoty Music' : artist,
-      );
-
-      await _audioHandler.playFromUrl(streamUrl, item, headers: streamHeaders);
-
-      // Update UI JS
-      _wvc?.evaluateJavascript(source: """
-        window._nativePlaying = true;
-        window._nativeLoading = false;
-        if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
-      """);
-    } catch (_) {}
+  /// Update progress bar di JS dari posisi MediaPlayer native
+  void _startProgressTimer() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      try {
+        final pos = await _ch.invokeMethod<int>('getPosition') ?? 0;
+        final dur = await _ch.invokeMethod<int>('getDuration') ?? 0;
+        if (dur > 0 && _wvc != null) {
+          await _wvc!.evaluateJavascript(source: """
+            (function(){
+              var pb = document.getElementById('progressBar');
+              var ct = document.getElementById('currentTime');
+              var tt = document.getElementById('totalTime');
+              if(pb) pb.value = $pos;
+              if(pb) pb.max = $dur;
+              if(ct) ct.innerText = _fmtTime($pos);
+              if(tt) tt.innerText = _fmtTime($dur);
+            })();
+          """);
+        }
+      } catch (_) {}
+    });
   }
 
   Future<bool> _onBack() async {
@@ -179,11 +158,13 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     final now = DateTime.now();
     if (_lastBack == null || now.difference(_lastBack!) > const Duration(seconds: 2)) {
       _lastBack = now;
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Tekan sekali lagi untuk keluar'),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Tekan sekali lagi untuk keluar'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
       return false;
     }
     return true;
@@ -249,31 +230,55 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
               onWebViewCreated: (c) {
                 _wvc = c;
 
+                // Dipanggil saat lagu mulai play — trigger MediaPlayer native
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicPlaying',
                   callback: (args) async {
-                    final title   = args.isNotEmpty ? args[0].toString() : '';
+                    final title   = args.isNotEmpty ? args[0].toString() : 'Auspoty';
                     final artist  = args.length > 1 ? args[1].toString() : '';
                     final videoId = args.length > 2 ? args[2].toString() : '';
                     WakelockPlus.enable();
-                    if (videoId.isNotEmpty) await _playNative(videoId, title, artist);
+                    if (videoId.isNotEmpty) {
+                      // Putar via MediaPlayer native (background-safe)
+                      try {
+                        await _ch.invokeMethod('playNative', {
+                          'videoId': videoId,
+                          'title': title,
+                          'artist': artist,
+                        });
+                        _startProgressTimer();
+                      } catch (e) {
+                        // Fallback: update notif saja
+                        try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true}); } catch (_) {}
+                      }
+                    } else {
+                      try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true}); } catch (_) {}
+                    }
                   },
                 );
 
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicPaused',
-                  callback: (args) async => _audioHandler.pause(),
+                  callback: (args) async {
+                    _progressTimer?.cancel();
+                    try { await _ch.invokeMethod('pauseNative'); } catch (_) {}
+                    try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
+                  },
                 );
 
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicResumed',
-                  callback: (args) async => _audioHandler.play(),
+                  callback: (args) async {
+                    try { await _ch.invokeMethod('resumeNative'); } catch (_) {}
+                    _startProgressTimer();
+                  },
                 );
 
                 c.addJavaScriptHandler(
                   handlerName: 'setBgMode',
                   callback: (args) async {
                     final on = args.isNotEmpty && (args[0] == true || args[0].toString() == 'true');
+                    try { await _ch.invokeMethod('updateTrack', {'title': 'Auspoty', 'artist': 'Auspoty Music', 'isPlaying': on}); } catch (_) {}
                     if (on) WakelockPlus.enable();
                   },
                 );
@@ -310,8 +315,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
 
                 c.addJavaScriptHandler(
                   handlerName: 'openGoogleLogin',
-                  callback: (args) async =>
-                    c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/login.html'))),
+                  callback: (args) async {
+                    await c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/login.html')));
+                  },
                 );
               },
 
@@ -430,16 +436,19 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             try { if(window.ytPlayer && window.ytPlayer.mute) window.ytPlayer.mute(); } catch(e){}
             window._nativeLoading = true;
             window._nativePlaying = false;
+            window._nativePaused = false;
             if(window.flutter_inappwebview){
               window.flutter_inappwebview.callHandler('onMusicPlaying', title||'', artist||'', videoId||'');
             }
           },
           pauseNative: function(){
             window._nativePlaying = false;
+            window._nativePaused = true;
             if(window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicPaused');
           },
           resumeNative: function(){
             window._nativePlaying = true;
+            window._nativePaused = false;
             if(window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicResumed');
           },
           openDownload: function(vid, t){
@@ -452,15 +461,30 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
           }
         };
 
+        window._onNativePlaybackStarted = function(){
+          window._nativeLoading = false;
+          window._nativePlaying = true;
+          window._nativePaused = false;
+          isPlaying = true;
+          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
+        };
+        window._onNativePlaybackPaused = function(){
+          window._nativePlaying = false;
+          window._nativePaused = true;
+          isPlaying = false;
+          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(false);
+        };
         window._updateNativeProgress = function(pos, dur){
           if(dur <= 0) return;
+          var pct = (pos/dur)*100;
           var bar = document.getElementById('progressBar');
-          if(bar){ bar.value = pos; bar.max = dur; }
+          if(bar){ bar.value = pct; bar.style.background='linear-gradient(to right, white '+pct+'%, rgba(255,255,255,0.2) '+pct+'%)'; }
           var fmt = function(s){ var m=Math.floor(s/60),sec=s%60; return m+':'+(sec<10?'0':'')+sec; };
           var ct = document.getElementById('currentTime'); if(ct) ct.innerText = fmt(pos);
           var tt = document.getElementById('totalTime'); if(tt) tt.innerText = fmt(dur);
         };
 
+        // Format waktu helper
         window._fmtTime = function(s) {
           var m = Math.floor(s/60), sec = s%60;
           return m + ':' + (sec<10?'0':'') + sec;
