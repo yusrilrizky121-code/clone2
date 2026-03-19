@@ -44,6 +44,7 @@ function onPlayerStateChange(event) {
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } } catch(e) {}
+        _startBgKeepAlive();
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
@@ -157,6 +158,7 @@ function playMusic(videoId, encodedData) {
     // Putar via ytPlayer — background audio dijaga oleh foreground service
     if (ytPlayer && ytPlayer.loadVideoById) {
         ytPlayer.loadVideoById(videoId);
+        _startBgKeepAlive();
         try {
             if (window.flutter_inappwebview && currentTrack) {
                 window.flutter_inappwebview.callHandler('onMusicPlaying',
@@ -838,6 +840,40 @@ if (document.readyState !== 'loading') {
 // BACKGROUND MODE — jaga musik tetap jalan saat keluar APK
 // ============================================================
 let _bgModeActive = false;
+
+// ── BACKGROUND KEEP-ALIVE ────────────────────────────────────────────────────
+// Re-apply visibility block setiap 5 detik saat musik jalan di Flutter APK
+let _bgKeepAliveInterval = null;
+
+function _applyVisibilityBlock() {
+    try {
+        Object.defineProperty(document, 'hidden', {
+            get: function(){ return false; }, configurable: true
+        });
+        Object.defineProperty(document, 'visibilityState', {
+            get: function(){ return 'visible'; }, configurable: true
+        });
+    } catch(e) {}
+    // Jika ytPlayer pause karena visibility, resume
+    try {
+        if (window.ytPlayer && typeof window.ytPlayer.getPlayerState === 'function') {
+            if (window.ytPlayer.getPlayerState() === 2 && isPlaying) {
+                window.ytPlayer.playVideo();
+            }
+        }
+    } catch(e) {}
+}
+
+function _startBgKeepAlive() {
+    _applyVisibilityBlock();
+    if (_bgKeepAliveInterval) clearInterval(_bgKeepAliveInterval);
+    _bgKeepAliveInterval = setInterval(_applyVisibilityBlock, 5000);
+}
+
+function _stopBgKeepAlive() {
+    if (_bgKeepAliveInterval) { clearInterval(_bgKeepAliveInterval); _bgKeepAliveInterval = null; }
+}
+
 
 function toggleBgMode() {
     _bgModeActive = !_bgModeActive;
