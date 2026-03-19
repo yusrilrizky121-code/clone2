@@ -38,11 +38,27 @@
             </intent-filter>
         </activity>
 
-        <!--
-            MusicPlayerService — pure foreground service (tanpa ExoPlayer).
-            Menjaga proses Flutter + WebView tetap hidup saat app di-background.
-            stopWithTask="false" → service TIDAK ikut mati saat app di-swipe dari recents.
-        -->
+        <!-- audio_service background service -->
+        <service
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <!-- audio_service receiver -->
+        <receiver
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- MusicPlayerService tetap ada untuk backward compat -->
         <service
             android:name=".MusicPlayerService"
             android:exported="false"
