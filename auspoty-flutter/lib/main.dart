@@ -1,15 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:http/http.dart' as http;
-import 'package:audio_service/audio_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'audio_handler.dart';
 
 final _keepAlive = InAppWebViewKeepAlive();
@@ -26,15 +27,15 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  // Cara Musify: init AudioService di main()
+  // Fix: AudioServiceConfig tidak boleh const karena Color bukan const
   _audioHandler = await AudioService.init(
     builder: () => AuspotyAudioHandler(),
-    config: const AudioServiceConfig(
+    config: AudioServiceConfig(
       androidNotificationChannelId: 'com.auspoty.app.audio',
       androidNotificationChannelName: 'Auspoty Music',
       androidNotificationOngoing: true,
       androidStopForegroundOnPause: false,
-      notificationColor: Color(0xFFa78bfa),
+      notificationColor: const Color(0xFFa78bfa),
       androidNotificationIcon: 'mipmap/ic_launcher',
     ),
   );
@@ -65,30 +66,25 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   InAppWebViewController? _wvc;
   bool _loading = true;
   DateTime? _lastBack;
-  StreamSubscription? _positionSub;
+  StreamSubscription? _posSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Callback dari notifikasi → kirim ke JS
-    _audioHandler.onSkipToNext = () {
-      _wvc?.evaluateJavascript(source:
-        "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
-    };
-    _audioHandler.onSkipToPrevious = () {
-      _wvc?.evaluateJavascript(source:
-        "if(typeof playPrevSong==='function') playPrevSong();");
-    };
+    _audioHandler.onSkipToNext = () => _wvc?.evaluateJavascript(
+        source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
+    _audioHandler.onSkipToPrevious = () => _wvc?.evaluateJavascript(
+        source: "if(typeof playPrevSong==='function') playPrevSong();");
 
-    // Update progress bar di JS setiap detik dari just_audio positionStream
-    _positionSub = _audioHandler.positionStream.listen((pos) {
+    // Update progress bar di JS setiap detik
+    _posSub = _audioHandler.positionStream.listen((pos) {
       final dur = _audioHandler.durationSeconds;
       if (dur > 0 && _wvc != null) {
-        final posS = pos.inSeconds;
+        final s = pos.inSeconds;
         _wvc!.evaluateJavascript(source:
-          "if(typeof window._updateNativeProgress==='function') window._updateNativeProgress($posS,$dur);");
+          "if(typeof window._updateNativeProgress==='function') window._updateNativeProgress($s,$dur);");
       }
     });
   }
@@ -96,13 +92,55 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _positionSub?.cancel();
+    _posSub?.cancel();
     super.dispose();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) WakelockPlus.enable();
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.paused) WakelockPlus.enable();
+  }
+
+  Future<void> _playNative(String videoId, String title, String artist) async {
+    try {
+      // Fetch stream URL dari API
+      final resp = await http.get(
+        Uri.parse('$_base/api/stream?videoId=$videoId'),
+        headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (resp.statusCode != 200) return;
+
+      // Parse JSON dengan dart:convert (lebih reliable dari regex)
+      final Map<String, dynamic> data = jsonDecode(resp.body);
+      if (data['status'] != 'success') return;
+
+      final streamUrl = (data['url'] as String).replaceAll(r'\/', '/');
+      final rawHeaders = data['headers'] as Map<String, dynamic>? ?? {};
+      final streamHeaders = rawHeaders.map((k, v) => MapEntry(k, v.toString()));
+
+      // Fallback headers
+      if (streamHeaders.isEmpty) {
+        streamHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
+        streamHeaders['Accept'] = '*/*';
+        streamHeaders['Accept-Language'] = 'en-us,en;q=0.5';
+      }
+
+      final item = MediaItem(
+        id: videoId,
+        title: title.isEmpty ? 'Auspoty' : title,
+        artist: artist.isEmpty ? 'Auspoty Music' : artist,
+      );
+
+      await _audioHandler.playFromUrl(streamUrl, item, headers: streamHeaders);
+
+      // Update UI JS
+      _wvc?.evaluateJavascript(source: """
+        window._nativePlaying = true;
+        window._nativeLoading = false;
+        if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
+      """);
+    } catch (_) {}
   }
 
   Future<bool> _onBack() async {
@@ -135,20 +173,17 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       return false;
     }
     if (!['view-home','view-search','view-library','view-settings'].contains(s)) {
-      await _wvc!.evaluateJavascript(source:
-        "if(typeof switchView==='function') switchView('home');");
+      await _wvc!.evaluateJavascript(source: "if(typeof switchView==='function') switchView('home');");
       return false;
     }
     final now = DateTime.now();
     if (_lastBack == null || now.difference(_lastBack!) > const Duration(seconds: 2)) {
       _lastBack = now;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Tekan sekali lagi untuk keluar'),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Tekan sekali lagi untuk keluar'),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ));
       return false;
     }
     return true;
@@ -177,59 +212,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     } catch (_) {
       _wvc?.evaluateJavascript(source: "showToast('Download gagal, coba lagi');");
     }
-  }
-
-  /// Fetch stream URL dari API lalu putar via just_audio
-  Future<void> _playNative(String videoId, String title, String artist) async {
-    try {
-      final resp = await http.get(
-        Uri.parse('$_base/api/stream?videoId=$videoId'),
-        headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
-      ).timeout(const Duration(seconds: 25));
-
-      if (resp.statusCode != 200) return;
-
-      // Parse JSON response
-      final body = resp.body;
-      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(body);
-      if (urlMatch == null) return;
-      final streamUrl = urlMatch.group(1)!.replaceAll(r'\/', '/');
-
-      // Ambil headers dari API response
-      final Map<String, String> streamHeaders = {};
-      final headersMatch = RegExp(r'"headers"\s*:\s*\{([^}]+)\}').firstMatch(body);
-      if (headersMatch != null) {
-        final hBody = headersMatch.group(1)!;
-        final pairs = RegExp(r'"([^"]+)"\s*:\s*"([^"]+)"').allMatches(hBody);
-        for (final m in pairs) {
-          streamHeaders[m.group(1)!] = m.group(2)!;
-        }
-      }
-      // Fallback headers kalau kosong
-      if (streamHeaders.isEmpty) {
-        streamHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
-        streamHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
-        streamHeaders['Accept-Language'] = 'en-us,en;q=0.5';
-        streamHeaders['Sec-Fetch-Mode'] = 'navigate';
-      }
-
-      final item = MediaItem(
-        id: videoId,
-        title: title.isEmpty ? 'Auspoty' : title,
-        artist: artist.isEmpty ? 'Auspoty Music' : artist,
-      );
-
-      await _audioHandler.playFromUrl(streamUrl, item, headers: streamHeaders);
-
-      // Beritahu JS playback sudah mulai
-      _wvc?.evaluateJavascript(source: """
-        (function(){
-          window._nativePlaying = true;
-          window._nativeLoading = false;
-          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
-        })();
-      """);
-    } catch (_) {}
   }
 
   @override
@@ -270,7 +252,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicPlaying',
                   callback: (args) async {
-                    final title   = args.isNotEmpty ? args[0].toString() : 'Auspoty';
+                    final title   = args.isNotEmpty ? args[0].toString() : '';
                     final artist  = args.length > 1 ? args[1].toString() : '';
                     final videoId = args.length > 2 ? args[2].toString() : '';
                     WakelockPlus.enable();
@@ -280,12 +262,12 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
 
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicPaused',
-                  callback: (args) async => await _audioHandler.pause(),
+                  callback: (args) async => _audioHandler.pause(),
                 );
 
                 c.addJavaScriptHandler(
                   handlerName: 'onMusicResumed',
-                  callback: (args) async => await _audioHandler.play(),
+                  callback: (args) async => _audioHandler.play(),
                 );
 
                 c.addJavaScriptHandler(
@@ -328,9 +310,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
 
                 c.addJavaScriptHandler(
                   handlerName: 'openGoogleLogin',
-                  callback: (args) async {
-                    await c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/login.html')));
-                  },
+                  callback: (args) async =>
+                    c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/login.html'))),
                 );
               },
 

@@ -8,7 +8,6 @@ class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
 
   void Function()? onSkipToNext;
   void Function()? onSkipToPrevious;
-  void Function()? onPlayPauseToggle;
 
   AuspotyAudioHandler() {
     audioPlayer = AudioPlayer(
@@ -20,88 +19,56 @@ class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
         ),
       ),
     );
-
-    audioPlayer.playbackEventStream.listen((_) => _updatePlaybackState(),
-        onError: (e) {});
-
-    audioPlayer.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) onSkipToNext?.call();
-      _updatePlaybackState();
+    audioPlayer.playbackEventStream.listen((_) => _updateState(), onError: (_) {});
+    audioPlayer.processingStateStream.listen((s) {
+      if (s == ProcessingState.completed) onSkipToNext?.call();
+      _updateState();
     });
-
-    audioPlayer.setAndroidAudioAttributes(
-      const AndroidAudioAttributes(
-        contentType: AndroidAudioContentType.music,
-        usage: AndroidAudioUsage.media,
-      ),
-    );
-
-    _initAudioSession();
+    audioPlayer.setAndroidAudioAttributes(const AndroidAudioAttributes(
+      contentType: AndroidAudioContentType.music,
+      usage: AndroidAudioUsage.media,
+    ));
+    _initSession();
   }
 
-  Future<void> _initAudioSession() async {
+  Future<void> _initSession() async {
     try {
-      final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
+      final s = await AudioSession.instance;
+      await s.configure(const AudioSessionConfiguration.music());
       await audioPlayer.setLoopMode(LoopMode.off);
     } catch (_) {}
   }
 
-  // Headers yang dibutuhkan YouTube — sama persis dengan yang API return
-  static const _ytHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'en-us,en;q=0.5',
-    'Sec-Fetch-Mode': 'navigate',
-  };
-
   Future<void> playFromUrl(String url, MediaItem item, {Map<String, String>? headers}) async {
     try {
       mediaItem.add(item);
-      _emitLoadingState();
-
-      // Stop dulu kalau sedang play
+      _emitLoading();
       if (audioPlayer.playing) await audioPlayer.stop();
-
-      final effectiveHeaders = headers ?? _ytHeaders;
-
       await audioPlayer.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(url),
-          headers: effectiveHeaders,
-          tag: item,
-        ),
+        AudioSource.uri(Uri.parse(url), headers: headers, tag: item),
       );
       await audioPlayer.play();
-
-      // Update durasi setelah loaded
-      audioPlayer.durationStream.firstWhere((d) => d != null).then((dur) {
-        if (dur != null) mediaItem.add(item.copyWith(duration: dur));
-      }).catchError((_) {});
-    } catch (e) {
-      // ignore
-    }
+      // Update durasi
+      final dur = audioPlayer.duration;
+      if (dur != null) mediaItem.add(item.copyWith(duration: dur));
+    } catch (_) {}
   }
 
-  void _emitLoadingState() {
+  void _emitLoading() {
     playbackState.add(PlaybackState(
-      controls: [
-        MediaControl.skipToPrevious,
-        MediaControl.pause,
-        MediaControl.skipToNext,
-      ],
+      controls: [MediaControl.skipToPrevious, MediaControl.pause, MediaControl.skipToNext],
       androidCompactActionIndices: const [0, 1, 2],
       processingState: AudioProcessingState.loading,
       playing: true,
     ));
   }
 
-  void _updatePlaybackState() {
-    final isPlaying = audioPlayer.playing;
+  void _updateState() {
+    final playing = audioPlayer.playing;
     playbackState.add(PlaybackState(
       controls: [
         MediaControl.skipToPrevious,
-        if (isPlaying) MediaControl.pause else MediaControl.play,
+        if (playing) MediaControl.pause else MediaControl.play,
         MediaControl.skipToNext,
       ],
       systemActions: const {MediaAction.seek},
@@ -113,7 +80,7 @@ class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
         ProcessingState.ready: AudioProcessingState.ready,
         ProcessingState.completed: AudioProcessingState.completed,
       }[audioPlayer.processingState]!,
-      playing: isPlaying,
+      playing: playing,
       updatePosition: audioPlayer.position,
       bufferedPosition: audioPlayer.bufferedPosition,
       speed: audioPlayer.speed,
@@ -123,7 +90,7 @@ class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override Future<void> play() => audioPlayer.play();
   @override Future<void> pause() => audioPlayer.pause();
   @override Future<void> stop() async { await audioPlayer.stop(); await super.stop(); }
-  @override Future<void> seek(Duration position) => audioPlayer.seek(position);
+  @override Future<void> seek(Duration p) => audioPlayer.seek(p);
   @override Future<void> skipToNext() async => onSkipToNext?.call();
   @override Future<void> skipToPrevious() async => onSkipToPrevious?.call();
 
