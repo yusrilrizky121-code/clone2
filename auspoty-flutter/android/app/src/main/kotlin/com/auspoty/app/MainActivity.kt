@@ -14,36 +14,67 @@ class MainActivity : FlutterActivity() {
         const val SERVICE_CHANNEL = "com.auspoty.app/service"
     }
 
+    private var serviceChannel: MethodChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // Channel untuk update notifikasi dari JS (via Flutter handler)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SERVICE_CHANNEL)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "updateNotif" -> {
-                        val title   = call.argument<String>("title")   ?: "Auspoty"
-                        val artist  = call.argument<String>("artist")  ?: ""
-                        val playing = call.argument<Boolean>("playing") ?: true
-                        val intent  = Intent(this, MusicPlayerService::class.java).apply {
-                            action = MusicPlayerService.ACTION_UPDATE_NOTIF
-                            putExtra(MusicPlayerService.EXTRA_TITLE,   title)
-                            putExtra(MusicPlayerService.EXTRA_ARTIST,  artist)
-                            putExtra(MusicPlayerService.EXTRA_PLAYING, playing)
-                        }
-                        startServiceSafe(intent)
-                        result.success(null)
+        serviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SERVICE_CHANNEL)
+        serviceChannel!!.setMethodCallHandler { call, result ->
+            when (call.method) {
+                // Dipanggil dari JS via Flutter handler saat lagu mulai/pause
+                "updateNotif" -> {
+                    val title   = call.argument<String>("title")   ?: "Auspoty"
+                    val artist  = call.argument<String>("artist")  ?: ""
+                    val playing = call.argument<Boolean>("playing") ?: true
+                    val intent  = Intent(this, MusicPlayerService::class.java).apply {
+                        action = MusicPlayerService.ACTION_UPDATE_NOTIF
+                        putExtra(MusicPlayerService.EXTRA_TITLE,   title)
+                        putExtra(MusicPlayerService.EXTRA_ARTIST,  artist)
+                        putExtra(MusicPlayerService.EXTRA_PLAYING, playing)
                     }
-                    else -> result.notImplemented()
+                    startServiceSafe(intent)
+                    result.success(null)
                 }
+                else -> result.notImplemented()
             }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WebView.setWebContentsDebuggingEnabled(false)
-        // Start foreground service saat app buka — jaga proses tetap hidup
         startServiceSafe(Intent(this, MusicPlayerService::class.java))
+        setupNotifCallbacks()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-setup callbacks saat app kembali ke foreground
+        setupNotifCallbacks()
+    }
+
+    /**
+     * Set callback ke service — saat tombol notifikasi ditekan,
+     * forward command ke WebView via MethodChannel ke Flutter/Dart,
+     * lalu Dart evaluateJavascript ke WebView.
+     */
+    private fun setupNotifCallbacks() {
+        MusicPlayerService.onPlayPause = {
+            runOnUiThread {
+                serviceChannel?.invokeMethod("onPlayPause", null)
+            }
+        }
+        MusicPlayerService.onNext = {
+            runOnUiThread {
+                serviceChannel?.invokeMethod("onNext", null)
+            }
+        }
+        MusicPlayerService.onPrev = {
+            runOnUiThread {
+                serviceChannel?.invokeMethod("onPrev", null)
+            }
+        }
     }
 
     private fun startServiceSafe(intent: Intent) {
