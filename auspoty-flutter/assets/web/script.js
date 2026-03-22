@@ -532,12 +532,16 @@ function applyLanguageTitles() {
 }
 async function loadHomeData() {
     const recentEl = document.getElementById('recentList');
+    const recentSec = recentEl ? recentEl.closest('.section-container') : null;
     if (recentEl) {
-        try {
-            const res = await apiFetch('/api/search?query=lagu+populer+indonesia');
-            const result = await res.json();
-            if (result.status === 'success' && result.data.length > 0) recentEl.innerHTML = result.data.slice(0, 5).map(renderVItem).join('');
-        } catch(e) { recentEl.innerHTML = '<div style="color:var(--text-sub);padding:8px;">Gagal memuat.</div>'; }
+        // Show from localStorage history — no API call needed
+        const history = JSON.parse(localStorage.getItem('auspotyHistory') || '[]');
+        if (history.length > 0) {
+            recentEl.innerHTML = history.slice(0, 5).map(renderVItem).join('');
+            if (recentSec) recentSec.style.display = '';
+        } else {
+            if (recentSec) recentSec.style.display = 'none';
+        }
     }
     const artistEl = document.getElementById('rowArtists');
     if (artistEl) artistEl.innerHTML = ARTISTS.map(renderArtistCard).join('');
