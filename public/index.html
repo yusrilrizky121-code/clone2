@@ -485,9 +485,9 @@
             </div>
         </div>
 
-        <!-- Rotating Album Art -->
+        <!-- Album Art — Namida style (square rounded, no rotation) -->
         <div class="player-art-container">
-            <div class="player-art-wrapper">
+            <div class="player-art-wrapper" id="playerArtWrapper">
                 <img id="playerArt" src="" alt="Album Art">
             </div>
         </div>
@@ -505,11 +505,9 @@
             </div>
         </div>
 
-        <!-- Progress Bar -->
+        <!-- Waveform Seekbar — Namida style -->
         <div class="progress-container" id="progressContainer">
-            <div class="progress-track" id="progressTrack">
-                <div class="progress-fill" id="progressFill"></div>
-                <div class="progress-thumb" id="progressThumb"></div>
+            <div class="waveform-container" id="waveformContainer">
                 <input type="range" class="progress-bar" id="progressBar" value="0" min="0" max="100" step="1" oninput="seekTo(this.value)">
             </div>
             <div class="time-info"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
