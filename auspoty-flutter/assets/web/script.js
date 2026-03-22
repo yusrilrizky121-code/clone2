@@ -461,6 +461,8 @@ const HOME_QUERIES_BY_LANG = {
         { id: 'rowGembira', query: 'lagu semangat gembira indonesia' },
         { id: 'rowCharts',  query: 'top hits indonesia 2025' },
         { id: 'rowGalau',   query: 'lagu galau sedih indonesia' },
+        { id: 'rowTiktok',  query: 'viral tiktok indonesia 2025' },
+        { id: 'rowHits',    query: 'lagu trending indonesia hari ini' },
     ],
     English: [
         { id: 'rowAnyar',   query: 'new english songs 2025' },
@@ -548,6 +550,16 @@ async function loadHomeData() {
     applyLanguageTitles();
     // Lazy load: 2 rows at a time to avoid hammering API and blocking main thread
     const rows = getHomeQueries();
+    // Hide rows not in active query list
+    const allRowIds = ['rowAnyar','rowGembira','rowCharts','rowGalau','rowTiktok','rowHits'];
+    const activeIds = rows.map(r => r.id);
+    allRowIds.forEach(id => {
+        if (!activeIds.includes(id)) {
+            const el = document.getElementById(id);
+            const sec = el ? el.closest('.section-container') : null;
+            if (sec) sec.style.display = 'none';
+        }
+    });
     async function loadRow(row) {
         const el = document.getElementById(row.id); if (!el) return;
         const sec = el.closest('.section-container');
