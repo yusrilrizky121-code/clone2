@@ -505,10 +505,13 @@
             </div>
         </div>
 
-        <!-- Waveform Seekbar — Namida style -->
+        <!-- Seekbar -->
         <div class="progress-container" id="progressContainer">
-            <div class="waveform-container" id="waveformContainer">
-                <input type="range" class="progress-bar" id="progressBar" value="0" min="0" max="100" step="1" oninput="seekTo(this.value)">
+            <div class="progress-track-wrap">
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <input type="range" class="progress-bar" id="progressBar" value="0" min="0" max="100" step="0.1" oninput="seekTo(this.value)">
             </div>
             <div class="time-info"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
         </div>
