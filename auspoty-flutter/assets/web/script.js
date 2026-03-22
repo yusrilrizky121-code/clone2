@@ -531,34 +531,32 @@ function applyLanguageTitles() {
     document.querySelectorAll('.section-title').forEach((el, i) => { if (titles[i]) el.innerText = titles[i]; });
 }
 async function loadHomeData() {
+    const recentEl = document.getElementById('recentList');
+    if (recentEl) {
+        try {
+            const res = await apiFetch('/api/search?query=lagu+populer+indonesia');
+            const result = await res.json();
+            if (result.status === 'success' && result.data.length > 0) recentEl.innerHTML = result.data.slice(0, 5).map(renderVItem).join('');
+        } catch(e) { recentEl.innerHTML = '<div style="color:var(--text-sub);padding:8px;">Gagal memuat.</div>'; }
+    }
     const artistEl = document.getElementById('rowArtists');
     if (artistEl) artistEl.innerHTML = ARTISTS.map(renderArtistCard).join('');
     applyLanguageTitles();
-
-    // Load one row at a time with staggered delay to avoid hammering cold-start API
-    async function loadRow(query, elId, renderer, retried) {
-        const el = document.getElementById(elId); if (!el) return;
+    const rows = getHomeQueries();
+    async function loadRow(row) {
+        const el = document.getElementById(row.id); if (!el) return;
         el.innerHTML = '<div style="color:var(--text-sub);padding:8px 0;font-size:13px;">Memuat...</div>';
         try {
-            const res = await apiFetch('/api/search?query=' + encodeURIComponent(query));
+            const res = await apiFetch('/api/search?query=' + encodeURIComponent(row.query));
             const result = await res.json();
-            if (result.status === 'success' && result.data.length > 0) {
-                el.innerHTML = result.data.slice(0, 5).map(renderer).join('');
-            } else if (!retried) {
-                setTimeout(() => loadRow(query, elId, renderer, true), 2000);
-            } else { el.innerHTML = ''; }
-        } catch(e) {
-            if (!retried) { setTimeout(() => loadRow(query, elId, renderer, true), 2000); }
-            else { el.innerHTML = ''; }
-        }
+            if (result.status === 'success' && result.data.length > 0) el.innerHTML = result.data.slice(0, 5).map(renderHCard).join('');
+            else el.innerHTML = '';
+        } catch(e) { el.innerHTML = ''; }
     }
-
-    setTimeout(() => loadRow('lagu populer indonesia', 'recentList', renderVItem, false), 0);
-
-    const rows = getHomeQueries();
-    rows.forEach((row, i) => {
-        setTimeout(() => loadRow(row.query, row.id, renderHCard, false), 800 + i * 800);
-    });
+    for (let i = 0; i < rows.length; i++) {
+        if (i < 2) { loadRow(rows[i]); }
+        else { setTimeout(() => loadRow(rows[i]), 1200 + (i - 2) * 600); }
+    }
 }
 
 // SEARCH
