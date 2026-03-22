@@ -42,7 +42,7 @@ function onPlayerStateChange(event) {
         isPlaying = true;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + pausePath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + pausePath + '"/>';
-        _setArtRotation(true);
+        _setArtPlaying(true);
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         // APK mode: onMusicPlaying sudah dipanggil dari playMusic(), tidak perlu di sini
@@ -51,7 +51,7 @@ function onPlayerStateChange(event) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + playPath + '"/>';
-        _setArtRotation(false);
+        _setArtPlaying(false);
         stopProgressBar();
     } else if (event.data == YT.PlayerState.ENDED) {
         isPlaying = false;
@@ -215,6 +215,7 @@ function startProgressBar() {
             if (fill) fill.style.width = pct + '%';
             if (thumb) thumb.style.left = pct + '%';
             if (mf) mf.style.width = pct + '%';
+            _updateWaveform(pct);
             const ct = document.getElementById('currentTime'); if (ct) ct.innerText = formatTime(cur);
             const tt = document.getElementById('totalTime'); if (tt) tt.innerText = formatTime(dur);
         }
@@ -838,6 +839,46 @@ async function submitComment() {
 }
 
 // INIT
+
+// ============================================================
+// NAMIDA UI — Album art scale & waveform seekbar
+// ============================================================
+function _setArtPlaying(playing) {
+    var w = document.getElementById('playerArtWrapper');
+    if (!w) return;
+    if (playing) w.classList.add('playing');
+    else w.classList.remove('playing');
+}
+
+var WAVEFORM_BARS = 48;
+var _waveHeights = [];
+function _initWaveform() {
+    var c = document.getElementById('waveformContainer');
+    if (!c) return;
+    c.querySelectorAll('.waveform-bar').forEach(function(b) { b.remove(); });
+    _waveHeights = [];
+    var input = c.querySelector('.progress-bar');
+    for (var i = 0; i < WAVEFORM_BARS; i++) {
+        var h = 20 + Math.abs(Math.sin(i * 0.7 + 1.3) * 55) + Math.abs(Math.sin(i * 1.9) * 20);
+        _waveHeights.push(Math.round(h));
+        var bar = document.createElement('div');
+        bar.className = 'waveform-bar';
+        bar.style.height = h + '%';
+        c.insertBefore(bar, input);
+    }
+}
+function _updateWaveform(pct) {
+    var c = document.getElementById('waveformContainer');
+    if (!c) return;
+    var bars = c.querySelectorAll('.waveform-bar');
+    var activeIdx = Math.floor(pct / 100 * WAVEFORM_BARS);
+    bars.forEach(function(bar, i) {
+        bar.classList.remove('played', 'active');
+        if (i < activeIdx) bar.classList.add('played');
+        else if (i === activeIdx) bar.classList.add('active');
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     applyAllSettings(); updateProfileUI(); loadHomeData(); renderSearchCategories();
 });

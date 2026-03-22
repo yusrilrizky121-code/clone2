@@ -14,7 +14,7 @@
     <!-- Firebase Auth SDK -->
     <script type="module">
       import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-      import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+      import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
       const firebaseConfig = {
@@ -30,10 +30,19 @@
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
 
-      window._firebaseSignIn = async function() {
-        try {
-          const result = await signInWithPopup(auth, provider);
+      // Expose auth ke window supaya bisa diakses dari Flutter inject
+      window._firebaseAuth = auth;
+
+      // Deteksi apakah di dalam WebView Android
+      // Cek AndroidBridge yang diinject Flutter — lebih reliable dari user agent
+      const isAuspotyApp = !!(window.AndroidBridge) || navigator.userAgent.includes('AuspotyApp');
+
+      // Handle redirect result saat halaman load
+      getRedirectResult(auth).then((result) => {
+        if (result && result.user) {
           const user = result.user;
           const userData = {
             name: user.displayName || 'Pengguna Google',
@@ -45,6 +54,37 @@
           if (typeof updateProfileUI === 'function') updateProfileUI();
           if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
           if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+        }
+      }).catch((e) => { console.log('redirect result:', e); });
+
+      window._firebaseSignIn = async function() {
+        try {
+          // Cek AndroidBridge saat dipanggil (bukan saat load) — lebih akurat
+          const inApp = !!(window.AndroidBridge);
+          if (inApp) {
+            // Di WebView: Google blokir signInWithRedirect & signInWithPopup
+            // Solusi: buka Custom Chrome Tab via Flutter, lalu reload WebView
+            if (typeof window.AndroidBridge.openGoogleLogin === 'function') {
+              window.AndroidBridge.openGoogleLogin();
+            } else {
+              if (typeof showToast === 'function') showToast('Membuka login Google...');
+              await signInWithRedirect(auth, provider);
+            }
+          } else {
+            // Di browser biasa: pakai popup
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+            const userData = {
+              name: user.displayName || 'Pengguna Google',
+              email: user.email || '',
+              picture: user.photoURL || '',
+              sub: user.uid || '',
+            };
+            localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+            if (typeof updateProfileUI === 'function') updateProfileUI();
+            if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
+            if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+          }
         } catch(e) {
           console.error('Firebase login error:', e);
           if (typeof showToast === 'function') showToast('Login gagal: ' + (e.code || e.message));
@@ -400,10 +440,10 @@
         <div id="miniPlayerArtist" class="mini-player-artist">Artis</div>
     </div>
     <div class="mini-player-controls" onclick="event.stopPropagation()">
-        <svg viewBox="0 0 24 24" onclick="openLyricsModal()"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h6v6h6v10H6zm2-7h8v2H8v-2zm0 4h5v2H8v-2z"/></svg>
         <svg id="downloadBtnMini" onclick="downloadMusic()" viewBox="0 0 24 24" title="Download MP3"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
         <svg id="miniPlayBtn" onclick="togglePlay()" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
     </div>
+    <div class="mini-progress"><div class="mini-progress-fill" id="miniProgressFill"></div></div>
 </div>
 
 <!-- BOTTOM NAV -->
@@ -426,42 +466,70 @@
     </div>
 </nav>
 
-<!-- FULL PLAYER -->
-<div id="playerModal" class="modal-overlay" style="display:none;">
+<!-- FULL PLAYER — Namida style -->
+<div id="playerModal" class="modal-overlay">
     <div id="playerBg"></div>
+    <div class="player-overlay"></div>
     <div class="player-content-wrapper">
+        <!-- Header -->
         <div class="modal-header">
-            <svg viewBox="0 0 24 24" onclick="minimizePlayer()" style="fill:white;width:28px;height:28px;cursor:pointer;"><path d="M15.957 2.793a1 1 0 010 1.414L8.164 12l7.793 7.793a1 1 0 11-1.414 1.414L5.336 12l9.207-9.207a1 1 0 011.414 0z" transform="rotate(-90 12 12)"/></svg>
-            <div style="text-align:center;">
-                <div style="font-size:10px;font-weight:400;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.7);">Memainkan Lagu</div>
-                <div style="font-size:12px;font-weight:700;color:white;">Auspoty</div>
+            <div class="player-header-btn" onclick="minimizePlayer()">
+                <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
             </div>
-            <svg viewBox="0 0 24 24" onclick="openAddToPlaylistModal()" style="fill:white;width:24px;height:24px;cursor:pointer;"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+            <div class="player-header-center">
+                <div class="player-header-label">Memainkan Lagu</div>
+                <div class="player-header-app">Auspoty</div>
+            </div>
+            <div class="player-header-btn" onclick="openAddToPlaylistModal()">
+                <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+            </div>
         </div>
+
+        <!-- Album Art — Namida style (square rounded, no rotation) -->
         <div class="player-art-container">
-            <img id="playerArt" src="" alt="Album Art">
+            <div class="player-art-wrapper" id="playerArtWrapper">
+                <img id="playerArt" src="" alt="Album Art">
+            </div>
         </div>
+
+        <!-- Track Info + Actions -->
         <div class="player-track-info">
-            <div style="overflow:hidden;flex:1;padding-right:16px;">
+            <div class="player-track-text">
                 <div id="playerTitle" class="player-title">Judul Lagu</div>
                 <div id="playerArtist" class="player-artist">Artis</div>
             </div>
-            <svg id="btnLikeSong" viewBox="0 0 24 24" onclick="toggleLike()" style="width:28px;height:28px;flex-shrink:0;cursor:pointer;fill:white;margin-right:12px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-            <svg id="downloadBtn" viewBox="0 0 24 24" onclick="downloadMusic()" style="width:26px;height:26px;flex-shrink:0;cursor:pointer;fill:rgba(255,255,255,0.7);margin-right:12px;" title="Download MP3"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-            <svg viewBox="0 0 24 24" onclick="openLyricsModal()" style="width:26px;height:26px;flex-shrink:0;cursor:pointer;fill:rgba(255,255,255,0.7);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h6v6h6v10H6zm2-7h8v2H8v-2zm0 4h5v2H8v-2z"/></svg>
+            <div class="player-action-btns">
+                <svg id="btnLikeSong" viewBox="0 0 24 24" onclick="toggleLike()" style="fill:rgba(255,255,255,0.6);"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <svg id="downloadBtn" viewBox="0 0 24 24" onclick="downloadMusic()" title="Download MP3"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                <svg viewBox="0 0 24 24" onclick="openLyricsModal()"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h6v6h6v10H6zm2-7h8v2H8v-2zm0 4h5v2H8v-2z"/></svg>
+            </div>
         </div>
-        <div class="progress-container">
-            <input type="range" id="progressBar" class="progress-bar" value="0" min="0" max="100" step="1" oninput="seekTo(this.value)">
+
+        <!-- Waveform Seekbar — Namida style -->
+        <div class="progress-container" id="progressContainer">
+            <div class="waveform-container" id="waveformContainer">
+                <input type="range" class="progress-bar" id="progressBar" value="0" min="0" max="100" step="1" oninput="seekTo(this.value)">
+            </div>
             <div class="time-info"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
         </div>
+
+        <!-- Controls -->
         <div class="playback-controls">
-            <svg id="repeatBtn" viewBox="0 0 24 24" onclick="toggleRepeat()" style="fill:var(--text-sub);width:24px;height:24px;cursor:pointer;" title="Ulangi"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-            <svg viewBox="0 0 24 24" onclick="playPrevSong()" style="fill:white;width:36px;height:36px;cursor:pointer;"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
-            <div class="play-pause-btn" onclick="togglePlay()" style="width:64px;height:64px;border-radius:50%;background:white;display:flex;justify-content:center;align-items:center;cursor:pointer;">
-                <svg id="mainPlayBtn" viewBox="0 0 24 24" style="fill:black;width:32px;height:32px;"><path d="M8 5v14l11-7z"/></svg>
+            <div class="ctrl-btn" id="btnRepeat" onclick="toggleRepeat()" title="Ulangi">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px;"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
             </div>
-            <svg viewBox="0 0 24 24" onclick="playNextSong()" style="fill:white;width:36px;height:36px;cursor:pointer;"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-            <svg viewBox="0 0 24 24" onclick="openCommentsModal()" style="fill:var(--text-sub);width:24px;height:24px;cursor:pointer;" title="Komentar"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+            <div class="ctrl-btn" onclick="playPrevSong()">
+                <svg viewBox="0 0 24 24" style="width:38px;height:38px;fill:white;"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+            </div>
+            <div class="ctrl-btn ctrl-play" onclick="togglePlay()">
+                <svg id="mainPlayBtn" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+            <div class="ctrl-btn" onclick="playNextSong()">
+                <svg viewBox="0 0 24 24" style="width:38px;height:38px;fill:white;"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            </div>
+            <div class="ctrl-btn" onclick="openCommentsModal()" title="Komentar">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px;"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+            </div>
         </div>
     </div>
 </div>
