@@ -764,9 +764,27 @@ function clearLikedSongs() {
 // DOWNLOAD
 function downloadMusic() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
-    const url = 'https://id.ytmp3.mobi/v1/#' + currentTrack.videoId;
-    if (window.AndroidBridge && typeof window.AndroidBridge.openDownload === 'function') { window.AndroidBridge.openDownload(url); showToast('Membuka halaman download...'); }
-    else { window.open(url, '_blank'); showToast('Halaman download dibuka. Klik Konversi lalu Unduh MP3'); }
+    // APK mode: download via Flutter native handler (background, no browser)
+    if (window.flutter_inappwebview) {
+        showToast('Mengunduh... tunggu sebentar');
+        try {
+            window.flutter_inappwebview.callHandler('downloadTrack', currentTrack.videoId, currentTrack.title || 'lagu');
+        } catch(e) { showToast('Download gagal, coba lagi'); }
+        return;
+    }
+    // Web/PWA fallback
+    showToast('Memulai unduhan...');
+    apiFetch('/api/download?video_id=' + currentTrack.videoId + '&title=' + encodeURIComponent(currentTrack.title))
+        .then(function(res) { if (!res.ok) throw new Error('failed'); return res.blob(); })
+        .then(function(blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = (currentTrack.title || 'music') + '.mp3';
+            document.body.appendChild(a); a.click();
+            document.body.removeChild(a); URL.revokeObjectURL(url);
+            showToast('Unduhan selesai!');
+        })
+        .catch(function() { showToast('Gagal mengunduh'); });
 }
 
 // GOOGLE AUTH
