@@ -31,6 +31,7 @@ let ytPlayer;
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
         height: '0', width: '0',
+        playerVars: { playsinline: 1, rel: 0 },
         events: { onReady: () => {}, onStateChange: onPlayerStateChange }
     });
 }
@@ -41,6 +42,7 @@ function onPlayerStateChange(event) {
         isPlaying = true;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + pausePath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + pausePath + '"/>';
+        _setArtRotation(true);
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         // APK mode: onMusicPlaying sudah dipanggil dari playMusic(), tidak perlu di sini
@@ -49,8 +51,8 @@ function onPlayerStateChange(event) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + playPath + '"/>';
+        _setArtRotation(false);
         stopProgressBar();
-        // APK mode: pause dihandle via AndroidBridge.pauseNative()
     } else if (event.data == YT.PlayerState.ENDED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
@@ -152,6 +154,9 @@ function playMusic(videoId, encodedData) {
     document.getElementById('playerArtist').innerText = currentTrack.artist;
     document.getElementById('playerBg').style.backgroundImage = "url('" + currentTrack.img + "')";
     document.getElementById('progressBar').value = 0;
+    const _pf = document.getElementById('progressFill'); if (_pf) _pf.style.width = '0%';
+    const _pt = document.getElementById('progressThumb'); if (_pt) _pt.style.left = '0%';
+    const _mf = document.getElementById('miniProgressFill'); if (_mf) _mf.style.width = '0%';
     document.getElementById('currentTime').innerText = '0:00';
     document.getElementById('totalTime').innerText = '0:00';
 
@@ -198,17 +203,22 @@ function minimizePlayer() { document.getElementById('playerModal').style.display
 function startProgressBar() {
     stopProgressBar();
     progressInterval = setInterval(() => {
-            if (ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getDuration) {
-            const cur = ytPlayer.getCurrentTime(), dur = ytPlayer.getDuration();
-            if (dur > 0) {
-                const pct = (cur / dur) * 100;
-                const bar = document.getElementById('progressBar');
-                if (bar) { bar.value = pct; bar.style.background = 'linear-gradient(to right, white ' + pct + '%, rgba(255,255,255,0.2) ' + pct + '%)'; }
-                const ct = document.getElementById('currentTime'); if (ct) ct.innerText = formatTime(cur);
-                const tt = document.getElementById('totalTime'); if (tt) tt.innerText = formatTime(dur);
-            }
+        if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+        const cur = ytPlayer.getCurrentTime(), dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        if (dur > 0) {
+            const pct = (cur / dur) * 100;
+            const bar = document.getElementById('progressBar');
+            const fill = document.getElementById('progressFill');
+            const thumb = document.getElementById('progressThumb');
+            const mf = document.getElementById('miniProgressFill');
+            if (bar) bar.value = pct;
+            if (fill) fill.style.width = pct + '%';
+            if (thumb) thumb.style.left = pct + '%';
+            if (mf) mf.style.width = pct + '%';
+            const ct = document.getElementById('currentTime'); if (ct) ct.innerText = formatTime(cur);
+            const tt = document.getElementById('totalTime'); if (tt) tt.innerText = formatTime(dur);
         }
-    }, 1000);
+    }, 500);
 }
 function stopProgressBar() { clearInterval(progressInterval); }
 function seekTo(value) {

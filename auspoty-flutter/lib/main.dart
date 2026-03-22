@@ -68,14 +68,34 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      // Saat background: MediaPlayer tetap jalan di service
-      // Hentikan progress timer (tidak perlu update UI saat background)
       _progressTimer?.cancel();
       try { _ch.invokeMethod('keepAlive'); } catch (_) {}
       WakelockPlus.enable();
+      // Override document.hidden so YouTube IFrame doesn't pause in background
+      _wvc?.evaluateJavascript(source: r"""
+        (function(){
+          if(window.__bgHidden) return;
+          window.__bgHidden = true;
+          try {
+            Object.defineProperty(document,'hidden',{get:function(){return false;},configurable:true});
+            Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';},configurable:true});
+            Object.defineProperty(document,'webkitHidden',{get:function(){return false;},configurable:true});
+            var _oa=document.addEventListener.bind(document);
+            document.addEventListener=function(t,fn,o){
+              if(t==='visibilitychange'||t==='webkitvisibilitychange') return;
+              _oa(t,fn,o);
+            };
+          } catch(e){}
+        })();
+      """);
     }
     if (state == AppLifecycleState.resumed) {
-      // Saat kembali ke foreground: restart progress timer
+      _wvc?.evaluateJavascript(source: r"""
+        (function(){
+          window.__bgHidden=false;
+          try{delete document.hidden;delete document.visibilityState;delete document.webkitHidden;}catch(e){}
+        })();
+      """);
       _startProgressTimer();
     }
   }
@@ -218,6 +238,10 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 databaseEnabled: true,
                 mediaPlaybackRequiresUserGesture: false,
                 allowsInlineMediaPlayback: true,
+                allowBackgroundAudioPlaying: true,
+                useHybridComposition: true,
+                allowFileAccessFromFileURLs: true,
+                allowUniversalAccessFromFileURLs: true,
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                 useWideViewPort: true,
                 loadWithOverviewMode: true,
