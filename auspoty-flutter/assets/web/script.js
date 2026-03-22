@@ -399,6 +399,30 @@ function switchView(name) {
     window.scrollTo(0, 0);
 }
 
+// FILTER HOME (Semua / Musik / Podcast pills)
+var _homeFilter = 'all';
+function filterHome(type, el) {
+    _homeFilter = type;
+    document.querySelectorAll('.home-header .pill').forEach(p => p.classList.remove('active'));
+    if (el) el.classList.add('active');
+    var recentSec = document.querySelector('#view-home .section-container:first-of-type');
+    if (type === 'podcast') {
+        // Load podcast content
+        var recentEl = document.getElementById('recentList');
+        if (recentEl) {
+            recentEl.innerHTML = '<div style="color:var(--text-sub);padding:8px;font-size:13px;">Memuat podcast...</div>';
+            apiFetch('/api/search?query=podcast+indonesia+terpopuler').then(r => r.json()).then(result => {
+                if (result.status === 'success' && result.data.length > 0)
+                    recentEl.innerHTML = result.data.slice(0, 8).map(renderVItem).join('');
+                else recentEl.innerHTML = '<div style="color:var(--text-sub);padding:8px;">Tidak ada podcast.</div>';
+            }).catch(() => { recentEl.innerHTML = '<div style="color:var(--text-sub);padding:8px;">Gagal memuat.</div>'; });
+        }
+    } else {
+        // Reload normal home
+        loadHomeData();
+    }
+}
+
 // RENDER HELPERS
 function makeTrackData(t) {
     const img = getHighResImage(t.thumbnail || t.img || '');
@@ -979,6 +1003,31 @@ function _updateWaveform(pct) {
 
 document.addEventListener('DOMContentLoaded', function() {
     applyAllSettings(); updateProfileUI(); loadHomeData(); renderSearchCategories();
+
+    // Hide Vercel toolbar (the floating circle button)
+    function _hideVercelToolbar() {
+        var selectors = ['vercel-live-feedback','#__vercel-toolbar','.__vercel-toolbar','vercel-toolbar','[data-vercel-toolbar]'];
+        selectors.forEach(function(s) {
+            try {
+                var el = document.querySelector(s);
+                if (el) el.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;';
+            } catch(e) {}
+        });
+        // Also check shadow DOM
+        document.querySelectorAll('*').forEach(function(el) {
+            if (el.tagName && el.tagName.toLowerCase().includes('vercel')) {
+                el.style.cssText = 'display:none!important;';
+            }
+        });
+    }
+    _hideVercelToolbar();
+    // Keep checking for 5 seconds in case it loads late
+    var _vt = 0;
+    var _vtInterval = setInterval(function() {
+        _hideVercelToolbar();
+        _vt++;
+        if (_vt > 10) clearInterval(_vtInterval);
+    }, 500);
 });
 
 
