@@ -223,8 +223,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 mediaPlaybackRequiresUserGesture: false,
                 allowsInlineMediaPlayback: true,
                 allowBackgroundAudioPlaying: true,
-                // useHybridComposition: false = SurfaceView = smoother scroll on Android
-                useHybridComposition: false,
+                // TextureView (true) = smoother scroll on Android 9+, better compositing
+                useHybridComposition: true,
                 allowFileAccessFromFileURLs: false,
                 allowUniversalAccessFromFileURLs: false,
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
@@ -233,7 +233,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 supportZoom: false,
                 builtInZoomControls: false,
                 displayZoomControls: false,
-                // Cache aggressively — reduce network on re-open
                 cacheMode: CacheMode.LOAD_CACHE_ELSE_NETWORK,
                 geolocationEnabled: false,
                 safeBrowsingEnabled: false,
@@ -241,9 +240,13 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 verticalScrollBarEnabled: false,
                 horizontalScrollBarEnabled: false,
                 overScrollMode: OverScrollMode.NEVER,
-                // Disable features that waste RAM
                 transparentBackground: false,
                 disabledActionModeMenuItems: ActionModeMenuItem.MENU_ITEM_NONE,
+                // Renderer priority — foreground = max priority
+                rendererPriorityPolicy: RendererPriorityPolicy(
+                  rendererRequestedPriority: RendererPriority.RENDERER_PRIORITY_IMPORTANT,
+                  waivedWhenNotVisible: false,
+                ),
                 userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
               ),
               onWebViewCreated: (c) {
