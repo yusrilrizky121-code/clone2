@@ -119,8 +119,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     }
   }
 
-  /// Update progress bar di JS dari posisi MediaPlayer native
-  // Progress handled by JS setInterval — no native polling needed
+  // Progress handled by JS setInterval
   void _startProgressTimer() {}
 
   Future<bool> _onBack() async {
@@ -176,40 +175,232 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       final t2 = title.replaceAll("'", "\\'");
       _wvc?.evaluateJavascript(source: "showToast('Mengunduh... tunggu 30-60 detik');");
       if (Platform.isAndroid) await Permission.storage.request();
-
-      // Step 1: POST ke API untuk dapat URL mp3
       final apiRes = await http.post(
         Uri.parse('$_base/api/download'),
         headers: {'Content-Type': 'application/json'},
         body: '{"videoId":"$videoId"}',
       ).timeout(const Duration(seconds: 90));
-
-      if (apiRes.statusCode != 200) throw Exception('API ${apiRes.statusCode}');
+      if (apiRes.statusCode != 200) throw Exception('API \${apiRes.statusCode}');
       final apiJson = json.decode(apiRes.body) as Map<String, dynamic>;
       if (apiJson['status'] != 'success') throw Exception(apiJson['message']?.toString() ?? 'failed');
-
       final mp3Url   = apiJson['url'] as String;
       final mp3Title = (apiJson['title'] as String?) ?? title;
-
-      // Step 2: Download file MP3
       final dl = await http.get(Uri.parse(mp3Url)).timeout(const Duration(seconds: 120));
-      if (dl.statusCode != 200) throw Exception('DL ${dl.statusCode}');
-
-      // Step 3: Simpan ke folder Download
+      if (dl.statusCode != 200) throw Exception('DL \${dl.statusCode}');
       final dir  = await getExternalStorageDirectory();
       final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
       final safe = mp3Title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final f    = File('${base}Download/$safe.mp3');
+      final f    = File('\${base}Download/\$safe.mp3');
       await f.parent.create(recursive: true);
       await f.writeAsBytes(dl.bodyBytes);
-
-      _wvc?.evaluateJavascript(source: "showToast('\u2713 Download selesai: $t2');");
+      _wvc?.evaluateJavascript(source: "showToast('\u2713 Download selesai: \$t2');");
     } catch (e) {
       _wvc?.evaluateJavascript(source: "showToast('Download gagal, coba lagi');");
     }
   }
 
-    Future<void> _inject(InAppWebViewController c) async {
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _onBack() && mounted) SystemNavigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0a0a0f),
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          top: true, bottom: true,
+          child: Stack(children: [
+            InAppWebView(
+              keepAlive: _keepAlive,
+              initialUrlRequest: URLRequest(url: WebUri(_base)),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                domStorageEnabled: true,
+                databaseEnabled: true,
+                mediaPlaybackRequiresUserGesture: false,
+                allowsInlineMediaPlayback: true,
+                allowBackgroundAudioPlaying: true,
+                useHybridComposition: false,
+                allowFileAccessFromFileURLs: false,
+                allowUniversalAccessFromFileURLs: false,
+                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                useWideViewPort: true,
+                loadWithOverviewMode: true,
+                supportZoom: false,
+                builtInZoomControls: false,
+                displayZoomControls: false,
+                cacheMode: CacheMode.LOAD_CACHE_ELSE_NETWORK,
+                userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+              ),
+              onWebViewCreated: (c) {
+                _wvc = c;
+
+                // Dipanggil saat lagu mulai play — trigger MediaPlayer native
+                c.addJavaScriptHandler(
+                  handlerName: 'onMusicPlaying',
+                  callback: (args) async {
+                    final title  = args.isNotEmpty ? args[0].toString() : 'Auspoty';
+                    final artist = args.length > 1 ? args[1].toString() : '';
+                    final imgUrl = args.length > 3 ? args[3].toString() : '';
+                    WakelockPlus.enable();
+                    try {
+                      await _ch.invokeMethod('updateTrack', {
+                        'title': title,
+                        'artist': artist,
+                        'isPlaying': true,
+                        'imgUrl': imgUrl,
+                      });
+                    } catch (_) {}
+                  },
+                );
+
+                c.addJavaScriptHandler(
+                  handlerName: 'onMusicPaused',
+                  callback: (args) async {
+                    _progressTimer?.cancel();
+                    try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
+                  },
+                );
+
+                c.addJavaScriptHandler(
+                  handlerName: 'onMusicResumed',
+                  callback: (args) async {
+                    try { await _ch.invokeMethod('setPlaying', {'isPlaying': true}); } catch (_) {}
+                  },
+                );
+
+                c.addJavaScriptHandler(
+                  handlerName: 'setBgMode',
+                  callback: (args) async {
+                    final on = args.isNotEmpty && (args[0] == true || args[0].toString() == 'true');
+                    try { await _ch.invokeMethod('updateTrack', {'title': 'Auspoty', 'artist': 'Auspoty Music', 'isPlaying': on}); } catch (_) {}
+                    if (on) WakelockPlus.enable();
+                  },
+                );
+
+                c.addJavaScriptHandler(handlerName: 'isAndroid', callback: (args) => true);
+
+                c.addJavaScriptHandler(
+                  handlerName: 'downloadTrack',
+                  callback: (args) async {
+                    final vid   = args.isNotEmpty ? args[0].toString() : '';
+                    final title = args.length > 1 ? args[1].toString() : 'lagu';
+                    if (vid.isNotEmpty) _download(vid, title);
+                  },
+                );
+
+                c.addJavaScriptHandler(
+                  handlerName: 'openDownload',
+                  callback: (args) async {
+                    final url = args.isNotEmpty ? args[0].toString() : '';
+                    if (url.isNotEmpty) {
+                      final uri = Uri.parse(url);
+                      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                );
+
+                c.addJavaScriptHandler(
+                  handlerName: 'getAccountName',
+                  callback: (args) async {
+                    final p = await SharedPreferences.getInstance();
+                    return p.getString('accountName') ?? '';
+                  },
+                );
+
+                c.addJavaScriptHandler(
+                  handlerName: 'openGoogleLogin',
+                  callback: (args) async {
+                    await c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/login.html')));
+                  },
+                );
+              },
+
+              onLoadStart: (c, url) => setState(() => _loading = true),
+
+              onLoadStop: (c, url) async {
+                setState(() => _loading = false);
+                final urlStr = url?.toString() ?? '';
+                if (urlStr.contains('userData=')) {
+                  final uri = Uri.parse(urlStr);
+                  final ud  = uri.queryParameters['userData'];
+                  if (ud != null && ud.isNotEmpty) {
+                    await c.evaluateJavascript(source: """
+                      (function(){
+                        try {
+                          var raw=decodeURIComponent("${Uri.encodeComponent(ud)}");
+                          localStorage.setItem('auspotyGoogleUser',raw);
+                          var p=JSON.parse(raw);
+                          if(typeof updateProfileUI==='function') updateProfileUI();
+                          if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
+                          if(typeof showToast==='function') showToast('Selamat datang, '+(p.name||'').split(' ')[0]+'!');
+                          history.replaceState(null,'','/');
+                        } catch(e){}
+                      })()
+                    """);
+                  }
+                }
+                if (urlStr.contains('vercel.app') || urlStr.contains('clone2') || urlStr.isEmpty) {
+                  await _inject(c);
+                }
+              },
+
+              onCreateWindow: (c, action) async {
+                final url = action.request.url?.toString() ?? '';
+                if (url.isNotEmpty && url != 'about:blank') {
+                  final uri = Uri.parse(url);
+                  if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+                return true;
+              },
+
+              onProgressChanged: (c, p) { if (p == 100) setState(() => _loading = false); },
+
+              onPermissionRequest: (c, req) async =>
+                  PermissionResponse(resources: req.resources, action: PermissionResponseAction.GRANT),
+
+              shouldOverrideUrlLoading: (c, nav) async {
+                final url = nav.request.url?.toString() ?? '';
+                const ok = ['vercel.app','youtube.com','ytimg.com','googleapis.com',
+                  'gstatic.com','firebaseapp.com','firebase.google.com',
+                  'accounts.google.com','google.com','googleusercontent.com'];
+                for (final d in ok) { if (url.contains(d)) return NavigationActionPolicy.ALLOW; }
+                if (url.startsWith('about:') || url.startsWith('blob:') || url.startsWith('data:')) return NavigationActionPolicy.ALLOW;
+                if (url.startsWith('http') && nav.isForMainFrame) {
+                  final uri = Uri.parse(url);
+                  if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  return NavigationActionPolicy.CANCEL;
+                }
+                return NavigationActionPolicy.ALLOW;
+              },
+            ),
+
+            if (_loading)
+              Container(
+                color: const Color(0xFF0a0a0f),
+                child: const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.music_note, color: Color(0xFFa78bfa), size: 64),
+                      SizedBox(height: 16),
+                      Text('Auspoty', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                      SizedBox(height: 24),
+                      CircularProgressIndicator(color: Color(0xFFa78bfa), strokeWidth: 2),
+                    ],
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _inject(InAppWebViewController c) async {
     await c.evaluateJavascript(source: r"""
       (function(){
         var id='__af__', o=document.getElementById(id); if(o) o.remove();
