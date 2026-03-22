@@ -1,0 +1,35 @@
+# Flutter project — tidak perlu di Vercel
+auspoty-flutter/
+auspoty-apk/
+auspoty-android/
+auspoty/
+
+# Folder lain yang tidak relevan
+CODE LYRICS SEARCH/
+CODE SPOTIFY MUSIC/
+Metrolist-main/
+musify-src/
+ytmusicapi-main/
+_apk_extract/
+assets/
+
+# APK files
+*.apk
+
+# Python patch/fix scripts
+*.py
+!api/search.py
+!api/lyrics.py
+!api/download.py
+!api/stream.py
+
+# Misc
+*.txt
+*.md
+*.css.bak
+*.js.bak
+script_good.js
+style_backup.css
+_main_dart_backup.txt
+.idea/
+.vscode/
