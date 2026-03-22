@@ -119,8 +119,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     }
   }
 
-  // Progress is handled by JS setInterval in ytPlayer — no native timer needed
-    // Progress handled by JS
+  /// Update progress bar di JS dari posisi MediaPlayer native
+  // Progress handled by JS setInterval — no native polling needed
   void _startProgressTimer() {}
 
   Future<bool> _onBack() async {
