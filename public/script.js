@@ -149,7 +149,7 @@ function playMusic(videoId, encodedData) {
     var _mpi = document.getElementById('miniPlayerImg');
     var _mpt = document.getElementById('miniPlayerTitle');
     var _mpa = document.getElementById('miniPlayerArtist');
-    if (_mp) _mp.style.display = 'flex';
+    if (_mp) { _mp.style.display = 'flex'; document.body.style.paddingBottom = 'calc(140px + env(safe-area-inset-bottom, 0px))'; }
     if (_mpi) _mpi.src = currentTrack.img;
     if (_mpt) _mpt.innerText = currentTrack.title;
     if (_mpa) _mpa.innerText = currentTrack.artist;

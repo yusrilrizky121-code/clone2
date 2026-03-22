@@ -29,7 +29,7 @@ body {
     color: var(--text-main);
     overflow-x: hidden;
     overflow-y: scroll;
-    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
     -webkit-font-smoothing: antialiased;
     font-size: var(--base-font-size);
     overscroll-behavior: none;
