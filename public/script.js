@@ -891,23 +891,12 @@ function _initWaveform() {
     }
 }
 function _updateWaveform(pct) {
-    var c = document.getElementById('waveformContainer');
-    if (!c) return;
-    var bars = c.querySelectorAll('.waveform-bar');
-    var activeIdx = Math.floor(pct / 100 * WAVEFORM_BARS);
-    bars.forEach(function(bar, i) {
-        bar.classList.remove('played', 'active');
-        if (i < activeIdx) bar.classList.add('played');
-        else if (i === activeIdx) bar.classList.add('active');
-    });
+    // waveform bars are hidden (display:none) — skip DOM work
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     applyAllSettings(); updateProfileUI(); loadHomeData(); renderSearchCategories();
 });
-if (document.readyState !== 'loading') {
-    applyAllSettings(); updateProfileUI(); loadHomeData(); renderSearchCategories();
-}
 
 
 // ============================================================
@@ -934,6 +923,7 @@ function _applyVisibilityBlock() {
 
 function _startBgKeepAlive() {
     _applyVisibilityBlock();
+    if (window.flutter_inappwebview) return; // Flutter handles keepalive
     if (_bgKeepAliveInterval) clearInterval(_bgKeepAliveInterval);
     _bgKeepAliveInterval = setInterval(_applyVisibilityBlock, 5000);
 }
