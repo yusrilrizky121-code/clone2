@@ -1004,10 +1004,7 @@ function _updateWaveform(pct) {
 document.addEventListener('DOMContentLoaded', function() {
     applyAllSettings(); updateProfileUI(); loadHomeData(); renderSearchCategories();
 
-    // Hide Vercel toolbar via CSS injection (lightweight, no DOM loop)
-    var _vtStyle = document.createElement('style');
-    _vtStyle.textContent = 'vercel-live-feedback,vercel-toolbar,[data-vercel-toolbar],#__vercel-toolbar{display:none!important;}';
-    document.head.appendChild(_vtStyle);
+
 });
 
 

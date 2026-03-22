@@ -455,19 +455,7 @@ body.font-small  .v-title { font-size: 12px !important; } body.font-small  .h-ti
 body.font-large  .v-title { font-size: 17px !important; } body.font-large  .h-title { font-size: 15px !important; } body.font-large  .section-title { font-size: 23px !important; } body.font-large  .mini-player-title { font-size: 15px !important; } body.font-large  .player-title { font-size: 26px !important; }
 body.font-xlarge .v-title { font-size: 20px !important; } body.font-xlarge .h-title { font-size: 17px !important; } body.font-xlarge .section-title { font-size: 26px !important; } body.font-xlarge .mini-player-title { font-size: 17px !important; } body.font-xlarge .player-title { font-size: 30px !important; }
 
-/* ===== HIDE VERCEL TOOLBAR ===== */
-vercel-live-feedback,
-#__vercel-toolbar,
-[data-vercel-toolbar],
-.__vercel-toolbar,
-vercel-toolbar {
-    display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    opacity: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-}
+
 
 /* ===== DOWNLOAD BTNS ===== */
 #downloadBtn:active, #downloadBtnMini:active { opacity: .6; }
