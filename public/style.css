@@ -29,13 +29,11 @@ body {
     color: var(--text-main);
     overflow-x: hidden;
     overflow-y: scroll;
-    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
     -webkit-font-smoothing: antialiased;
     font-size: var(--base-font-size);
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
-    /* Force GPU layer on body scroll container */
-    transform: translateZ(0);
 }
 body.light-mode {
     --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:rgba(0,0,0,0.07);
@@ -105,7 +103,8 @@ a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
 .install-btn svg { fill: var(--text-sub); width: 22px; height: 22px; }
 
 /* ===== SECTIONS ===== */
-.section-container { margin-bottom: 36px; }
+.section-container { margin-bottom: 20px; }
+.section-container:last-of-type { margin-bottom: 0; }
 .section-title { font-size: 20px; font-weight: 700; margin: 0 20px 16px; letter-spacing: -.3px; color: #fff; }
 
 /* ===== VERTICAL LIST ===== */
