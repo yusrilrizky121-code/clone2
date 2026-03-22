@@ -145,20 +145,30 @@ function playMusic(videoId, encodedData) {
     checkIfLiked(currentTrack.videoId);
     updateMediaSession();
 
-    document.getElementById('miniPlayer').style.display = 'flex';
-    document.getElementById('miniPlayerImg').src = currentTrack.img;
-    document.getElementById('miniPlayerTitle').innerText = currentTrack.title;
-    document.getElementById('miniPlayerArtist').innerText = currentTrack.artist;
-    document.getElementById('playerArt').src = currentTrack.img;
-    document.getElementById('playerTitle').innerText = currentTrack.title;
-    document.getElementById('playerArtist').innerText = currentTrack.artist;
-    document.getElementById('playerBg').style.backgroundImage = "url('" + currentTrack.img + "')";
-    document.getElementById('progressBar').value = 0;
-    const _pf = document.getElementById('progressFill'); if (_pf) _pf.style.width = '0%';
-    const _pt = document.getElementById('progressThumb'); if (_pt) _pt.style.left = '0%';
-    const _mf = document.getElementById('miniProgressFill'); if (_mf) _mf.style.width = '0%';
-    document.getElementById('currentTime').innerText = '0:00';
-    document.getElementById('totalTime').innerText = '0:00';
+    var _mp = document.getElementById('miniPlayer');
+    var _mpi = document.getElementById('miniPlayerImg');
+    var _mpt = document.getElementById('miniPlayerTitle');
+    var _mpa = document.getElementById('miniPlayerArtist');
+    if (_mp) _mp.style.display = 'flex';
+    if (_mpi) _mpi.src = currentTrack.img;
+    if (_mpt) _mpt.innerText = currentTrack.title;
+    if (_mpa) _mpa.innerText = currentTrack.artist;
+    var _pa = document.getElementById('playerArt');
+    var _pt2 = document.getElementById('playerTitle');
+    var _par = document.getElementById('playerArtist');
+    var _pbg = document.getElementById('playerBg');
+    if (_pa) _pa.src = currentTrack.img;
+    if (_pt2) _pt2.innerText = currentTrack.title;
+    if (_par) _par.innerText = currentTrack.artist;
+    if (_pbg) _pbg.style.backgroundImage = "url('" + currentTrack.img + "')";
+    var _bar = document.getElementById('progressBar');
+    var _pf = document.getElementById('progressFill');
+    var _mf = document.getElementById('miniProgressFill');
+    if (_bar) _bar.value = 0;
+    if (_pf) _pf.style.width = '0%';
+    if (_mf) _mf.style.width = '0%';
+    var _ct = document.getElementById('currentTime'); if (_ct) _ct.innerText = '0:00';
+    var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
 
     // Putar audio via ytPlayer (baik di web maupun APK)
     if (ytPlayer && ytPlayer.loadVideoById) {
@@ -204,6 +214,9 @@ function startProgressBar() {
     stopProgressBar();
     progressInterval = setInterval(() => {
         if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+        const _modal = document.getElementById('playerModal');
+        const _mini = document.getElementById('miniPlayer');
+        if ((!_modal || _modal.style.display === 'none' || _modal.style.display === '') && (!_mini || _mini.style.display === 'none' || _mini.style.display === '')) return;
         const cur = ytPlayer.getCurrentTime(), dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
         if (dur > 0) {
             const pct = (cur / dur) * 100;
@@ -280,7 +293,7 @@ async function openLyricsModal() {
 }
 function startLyricsScroll() {
     stopLyricsScroll();
-    lyricsScrollInterval = setInterval(function() {
+    lyricsScrollInterval = setInterval(function() { // 500ms
         var cur = 0, dur = 0;
         if (ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
@@ -306,7 +319,7 @@ function startLyricsScroll() {
             var lb = document.getElementById('lyricsBody');
             if (lb) lb.scrollTop = activeLine.offsetTop - (lb.clientHeight / 2) + (activeLine.offsetHeight / 2);
         }
-    }, 300);
+    }, 500);
 }
 function stopLyricsScroll() { clearInterval(lyricsScrollInterval); lyricsScrollInterval = null; }
 function closeLyricsToPlayer() { stopLyricsScroll(); document.getElementById('lyricsModal').style.display = 'none'; document.getElementById('playerModal').style.display = 'flex'; }
@@ -348,13 +361,13 @@ function playMusicById(videoId) {
 function renderVItem(t) {
     _cacheTrack(t);
     return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
-        '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/48x48?text=music\'">' +
+        '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '">' +
         '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
 }
 function renderHCard(t) {
     _cacheTrack(t);
     return '<div class="h-card" onclick="playMusicById(\'' + t.videoId + '\')">' +
-        '<img loading="lazy" class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/140x140?text=music\'">' +
+        '<img loading="lazy" class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '">' +
         '<div class="h-title">' + (t.title || '') + '</div></div>';
 }
 function renderArtistCard(name) {
@@ -444,7 +457,7 @@ async function loadHomeData() {
         try {
             const res = await apiFetch('/api/search?query=lagu+populer+indonesia');
             const result = await res.json();
-            if (result.status === 'success' && result.data.length > 0) recentEl.innerHTML = result.data.slice(0, 6).map(renderVItem).join('');
+            if (result.status === 'success' && result.data.length > 0) recentEl.innerHTML = result.data.slice(0, 5).map(renderVItem).join('');
         } catch(e) { recentEl.innerHTML = '<div style="color:var(--text-sub);padding:8px;">Gagal memuat.</div>'; }
     }
     const artistEl = document.getElementById('rowArtists');
@@ -458,14 +471,14 @@ async function loadHomeData() {
         try {
             const res = await apiFetch('/api/search?query=' + encodeURIComponent(row.query));
             const result = await res.json();
-            if (result.status === 'success' && result.data.length > 0) el.innerHTML = result.data.slice(0, 8).map(renderHCard).join('');
+            if (result.status === 'success' && result.data.length > 0) el.innerHTML = result.data.slice(0, 5).map(renderHCard).join('');
             else el.innerHTML = '';
         } catch(e) { el.innerHTML = ''; }
     }
     // Load first 2 rows immediately, rest after 800ms delay
     for (let i = 0; i < rows.length; i++) {
         if (i < 2) { loadRow(rows[i]); }
-        else { setTimeout(() => loadRow(rows[i]), 800 + (i - 2) * 400); }
+        else { setTimeout(() => loadRow(rows[i]), 1200 + (i - 2) * 600); }
     }
 }
 
