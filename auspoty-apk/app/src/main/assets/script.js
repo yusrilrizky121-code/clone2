@@ -88,6 +88,10 @@ function playMusic(videoId, encodedData) {
     document.getElementById('currentTime').innerText = '0:00';
     document.getElementById('totalTime').innerText = '0:00';
     if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+    // Kirim info ke MusicService Android untuk notifikasi
+    if (window.AndroidBridge && typeof window.AndroidBridge.onMusicPlay === 'function') {
+        window.AndroidBridge.onMusicPlay(currentTrack.title || 'Auspoty', currentTrack.artist || '');
+    }
 }
 function togglePlay() { if (!ytPlayer) return; isPlaying ? ytPlayer.pauseVideo() : ytPlayer.playVideo(); }
 function expandPlayer() { document.getElementById('playerModal').style.display = 'flex'; }
@@ -445,8 +449,6 @@ function playFirstPlaylistTrack() {
         playMusic(t.videoId, makeTrackData(t));
     }
 }
-
-// CREATE PLAYLIST
 function openCreatePlaylist() { document.getElementById('createPlaylistModal').style.display = 'block'; }
 function closeCreatePlaylist() { document.getElementById('createPlaylistModal').style.display = 'none'; }
 function previewImage(event) {
@@ -464,8 +466,6 @@ function saveNewPlaylist() {
     tx.objectStore('playlists').put(pl);
     tx.oncomplete = () => { closeCreatePlaylist(); renderLibraryUI(); showToast('Playlist dibuat!'); };
 }
-
-// ADD TO PLAYLIST
 function openAddToPlaylistModal() {
     if (!currentTrack || !db) return;
     document.getElementById('addToPlaylistModal').style.display = 'flex';
@@ -548,8 +548,6 @@ function toggleNotif(key) {
     const k = 'notif' + key.charAt(0).toUpperCase() + key.slice(1);
     s[k] = !s[k]; saveSettings(s); applyAllSettings();
 }
-
-// PICKER
 let pickerCallback = null;
 function openPicker(title, options, currentVal, cb) {
     pickerCallback = cb;
@@ -615,8 +613,6 @@ function openRegionPicker() {
         { label: 'Korea', value: 'Korea' },
     ], s.region || 'Indonesia', (val) => { saveSettings({ region: val }); applyAllSettings(); });
 }
-
-// EDIT PROFILE
 function openEditProfile() {
     const s = getSettings();
     document.getElementById('editProfileName').value = s.profileName || '';
@@ -628,8 +624,6 @@ function saveProfile() {
     const name = document.getElementById('editProfileName').value.trim() || 'Pengguna Auspoty';
     saveSettings({ profileName: name }); applyAllSettings(); closeEditProfile(); showToast('Profil disimpan!');
 }
-
-// CACHE
 function estimateCacheSize() {
     const el = document.getElementById('cacheSize'); if (!el) return;
     if ('storage' in navigator && 'estimate' in navigator.storage) {
@@ -650,7 +644,6 @@ function clearLikedSongs() {
     tx.objectStore('liked_songs').clear();
     tx.oncomplete = () => { showToast('Lagu disukai dihapus!'); renderLibraryUI(); };
 }
-
 
 // DOWNLOAD
 async function downloadMusic() {
@@ -686,9 +679,7 @@ async function downloadMusic() {
     }
 }
 
-
-
-// ===================== GOOGLE LOGIN =====================
+// GOOGLE LOGIN
 function loginWithGoogle() {
     const user = getGoogleUser();
     if (user) {
@@ -700,7 +691,6 @@ function loginWithGoogle() {
         }
         return;
     }
-    // Langsung buka LoginActivity — WebView Google login (cara Metrolist)
     if (window.AndroidBridge) {
         window.AndroidBridge.openGoogleLogin();
     }
@@ -751,6 +741,7 @@ function updateProfileUI() {
         if (loginSub) loginSub.innerText = 'Sinkronkan data kamu';
     }
 }
+
 // INIT
 applyAllSettings();
 updateProfileUI();

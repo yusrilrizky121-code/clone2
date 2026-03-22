@@ -1,22 +1,22 @@
-import re
+import os, re
 
-with open('public/script.js', 'r', encoding='utf-8') as f:
+base = r'C:\Users\Admin\Downloads\Auspoty'
+js_path = os.path.join(base, 'public', 'script.js')
+
+with open(js_path, 'r', encoding='utf-8') as f:
     content = f.read()
 
-# Cari posisi "// CACHE" yang bersih
-cache_pos = content.find('// CACHE\nfunction estimateCacheSize')
-if cache_pos == -1:
-    print("ERROR: tidak ketemu // CACHE")
+# Cari posisi clearLikedSongs selesai
+marker = "traryUI(); };"
+pos = content.find(marker)
+if pos == -1:
+    print("ERROR: marker tidak ketemu")
     exit(1)
 
-# Ambil bagian bersih sampai clearLikedSongs selesai
-clean_end = content.find('tx.oncomplete = () => { showToast(\'Lagu disukai dihapus!\'); renderLibraryUI(); };', cache_pos)
-clean_end = content.find('\n}', clean_end) + 2
+end_pos = content.find('\n}', pos) + 2
+clean = content[:end_pos]
 
-# Tulis bagian bersih + tambah kode baru
-new_tail = content[:clean_end]
-
-new_tail += '''
+clean += '''
 
 // REPEAT & PREV/NEXT
 let isRepeat = false;
@@ -41,7 +41,7 @@ function openCommentsModal() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
     const modal = document.getElementById('commentsModal');
     modal.style.display = 'flex';
-    document.getElementById('commentTrackName').innerText = currentTrack.title + ' — ' + currentTrack.artist;
+    document.getElementById('commentTrackName').innerText = currentTrack.title + ' \u2014 ' + currentTrack.artist;
     const user = getGoogleUser();
     document.getElementById('commentInputArea').style.display = user ? 'block' : 'none';
     document.getElementById('commentLoginPrompt').style.display = user ? 'none' : 'block';
@@ -153,24 +153,20 @@ function updateProfileUI() {
     }
 }
 function loginWithGoogle() {
-    if (typeof window._firebaseSignIn === 'function') {
-        window._firebaseSignIn();
-    }
+    if (typeof window._firebaseSignIn === 'function') w
 }
-function logoutFromGoogle() {
-    if (typeof window._firebaseSignOut === 'function') {
-        window._firebaseSignOut();
-    }
+functmGoogle() {
+ ut();
 }
 function getGoogleUser() {
-    try { return JSON.parse(localStorage.getItem('auspotyGoogleUser') || 'null'); } catch(e) { return null; }
+    try { return JSON.parse(localS} catch(e) { return null; }
 }
-function previewProfilePhoto(event) {
+fhoto(event) {
     const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        const av = document.getElementById('editProfileAvatar');
-        if (av) av.innerHTML = '<img src="' + e.target.result + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+        const av = document.getElemenitProfileAvatar');
+        if (av) av.innerHTML = '<img src="' + e.target.res>';
         localStorage.setItem('auspotyProfilePhoto', e.target.result);
     };
     reader.readAsDataURL(file);
@@ -178,28 +174,28 @@ function previewProfilePhoto(event) {
 function openEditProfile() {
     const s = getSettings();
     const user = getGoogleUser();
-    document.getElementById('editProfileName').value = user ? user.name : (s.profileName || '');
-    const av = document.getElementById('editProfileAvatar');
-    const photo = localStorage.getItem('auspotyProfilePhoto');
-    const pic = (user && user.picture) ? user.picture : photo;
+ '');
+    const av = document.getEileAvatar');
+    const photo = localStora;
+    const pic = (user && user.picure) ? user.picture : photo;
     if (av) {
         if (pic) {
             av.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
         } else {
-            av.innerText = (user ? user.name : (s.profileName || 'A')).charAt(0).toUpperCase();
+            aase();
         }
     }
-    document.getElementById('editProfileModal').style.display = 'flex';
+    document.getlay = 'flex';
 }
-function closeEditProfile() { document.getElementById('editProfileModal').style.display = 'none'; }
+function e'; }
 function saveProfile() {
-    const name = document.getElementById('editProfileName').value.trim() || 'Pengguna Auspoty';
-    saveSettings({ profileName: name }); applyAllSettings(); closeEditProfile(); showToast('Profil disimpan!');
+    const name = document.getElementById('editProfileName').value.trim(uspoty';
+ ; showToast('Profil disimpan!');
 }
-function closeLoginModal() { document.getElementById('loginModal').style.display = 'none'; }
+function closeLoginModal
 '''
 
-with open('public/script.js', 'w', encoding='utf-8') as f:
-    f.write(new_tail)
+wg='utf-8') as f:
+    f.write(clean)
 
-print("DONE - script.js fixed, lines:", len(new_tail.splitlines()))
+ines()))

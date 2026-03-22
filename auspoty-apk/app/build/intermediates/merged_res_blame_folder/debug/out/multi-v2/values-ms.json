@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.auspoty.app-mergeDebugResources-19:/values-ms/values-ms.xml",
+            "outputFile": "com.auspoty.app-mergeDebugResources-20:/values-ms/values-ms.xml",
             "map": [
                 {
                     "source": "C:\\Users\\Admin\\.gradle\\caches\\transforms-3\\f0f4ee7c3b88100b2d2cd4b05ab423cd\\transformed\\core-1.9.0\\res\\values-ms\\values-ms.xml",

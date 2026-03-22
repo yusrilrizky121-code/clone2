@@ -14,9 +14,19 @@ android {
         versionName "3.0.0"
     }
 
+    signingConfigs {
+        release {
+            storeFile file("auspoty-release.jks")
+            storePassword "auspoty123"
+            keyAlias "auspoty"
+            keyPassword "auspoty123"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

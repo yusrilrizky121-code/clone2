@@ -160,8 +160,7 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl(APP_URL);
 
         // Cegah WebView di-throttle saat background
-        webView.setKeepScreenOn(false); // jangan paksa layar nyala, tapi...
-        // ...pastikan rendering tetap aktif
+        webView.setKeepScreenOn(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             webView.getSettings().setOffscreenPreRaster(true);
         }
@@ -182,12 +181,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (webView != null) {
-                    // Cek state player dan trigger next song jika ended
                     webView.evaluateJavascript(
                         "(function(){" +
                         "  if(typeof ytPlayer!=='undefined'&&ytPlayer&&typeof ytPlayer.getPlayerState==='function'){" +
                         "    var s=ytPlayer.getPlayerState();" +
-                        // ENDED — gunakan flag _bgEndedHandling agar tidak double-trigger
                         "    if(s===0&&!window._bgEndedHandling){" +
                         "      window._bgEndedHandling=true;" +
                         "      if(typeof isRepeat!=='undefined'&&isRepeat){" +
@@ -198,7 +195,6 @@ public class MainActivity extends AppCompatActivity {
                         "        setTimeout(function(){window._bgEndedHandling=false;},5000);" +
                         "      }" +
                         "    } else if(s===1||s===3){" +
-                        // Playing atau buffering — reset flag
                         "      window._bgEndedHandling=false;" +
                         "    } else if(s===2&&typeof isPlaying!=='undefined'&&isPlaying){" +
                         "      ytPlayer.playVideo();" +
@@ -216,36 +212,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private long lastBackPressTime = 0;
-
-    // View utama yang trigger double-back (home, search, library)
-    // Settings → kembali ke home, bukan exit
     private static final String[] DOUBLE_BACK_VIEWS = {"view-home", "view-search", "view-library"};
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            // Langsung cek view aktif via JS (tidak pakai canGoBack karena history dikelola JS)
             webView.evaluateJavascript(
                 "(function(){ " +
                 "  var active = document.querySelector('.view-section.active');" +
                 "  return active ? active.id : 'view-home';" +
                 "})()",
                 result -> {
-                    if (result == null) result = ""view-home"";
-                    // Hapus tanda kutip dari hasil JS
-                    final String viewId = result.replace(""", "").trim();
-
-                    // Cek apakah ini view yang trigger double-back
+                    if (result == null) result = "\"view-home\"";
+                    final String viewId = result.replace("\"", "").trim();
                     boolean isDoubleBackView = false;
                     for (String v : DOUBLE_BACK_VIEWS) {
                         if (v.equals(viewId)) { isDoubleBackView = true; break; }
                     }
-
                     if (isDoubleBackView) {
-                        // Di home/search/library — double back to exit
                         long now = System.currentTimeMillis();
                         if (now - lastBackPressTime < 2000) {
-                            // Tekan 2x → minimize app (bukan kill)
                             runOnUiThread(() -> moveTaskToBack(true));
                         } else {
                             lastBackPressTime = now;
@@ -258,7 +244,6 @@ public class MainActivity extends AppCompatActivity {
                             );
                         }
                     } else {
-                        // Di settings atau view sub → kembali ke home
                         runOnUiThread(() ->
                             webView.evaluateJavascript(
                                 "if(typeof switchView==='function') switchView('home');", null)
@@ -301,7 +286,6 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         // JANGAN panggil webView.onPause() atau webView.pauseTimers()
         // supaya YouTube player tidak berhenti saat background
-        // WebView tetap aktif, WakeLock menjaga CPU tetap jalan
     }
 
     @Override
@@ -322,7 +306,6 @@ public class MainActivity extends AppCompatActivity {
             if (accountName == null) accountName = "Pengguna Google";
             final String name = accountName;
             final String email = name.contains("@") ? name : name + "@gmail.com";
-            // Inject user data ke localStorage WebView
             webView.evaluateJavascript(
                 "(function(){" +
                 "var user={name:'" + name.replace("'", "\\'") + "'," +

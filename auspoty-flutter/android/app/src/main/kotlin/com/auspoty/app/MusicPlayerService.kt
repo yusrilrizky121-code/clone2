@@ -44,7 +44,7 @@ class MusicPlayerService : Service() {
         var onPlayPause: (() -> Unit)? = null
         var onNext: (() -> Unit)? = null
         var onPrev: (() -> Unit)? = null
-        var onPositionUpdate: ((Int, Int) -> Unit)? = null  // position, duration in seconds
+        var onPositionUpdate: ((Int, Int) -> Unit)? = null
 
         var instance: MusicPlayerService? = null
     }
@@ -96,12 +96,6 @@ class MusicPlayerService : Service() {
         Log.d(TAG, "Service created")
     }
 
-    // ── Public API ────────────────────────────────────────────────────────────
-
-    /**
-     * Dipanggil dari JS onMusicPlaying via Flutter bridge.
-     * Fetch audio URL dari /api/stream dan putar via MediaPlayer.
-     */
     fun playNative(videoId: String, title: String, artist: String) {
         currentVideoId = videoId
         currentTitle   = title.ifEmpty { "Auspoty" }
@@ -114,7 +108,6 @@ class MusicPlayerService : Service() {
         refreshNotif()
         acquireWakeLock()
 
-        // Fetch stream URL di background thread
         Thread {
             try {
                 Log.d(TAG, "Fetching stream URL for $videoId")
@@ -170,19 +163,18 @@ class MusicPlayerService : Service() {
         isPlaying      = playing
         Log.d(TAG, "updateTrackInfo: title=$title, imgUrl=$imgUrl")
         if (playing) acquireWakeLock()
-        // Reset art jika lagu baru
         if (imgUrl.isNotEmpty() && imgUrl != currentImgUrl) {
             currentImgUrl = imgUrl
-            currentArt = null  // clear dulu, fetch baru
+            currentArt = null
             updateMediaSessionMeta()
             updatePlaybackState()
-            refreshNotif()  // tampil dulu tanpa gambar
+            refreshNotif()
             Thread {
                 val bmp = fetchBitmap(imgUrl)
                 if (bmp != null) {
                     currentArt = bmp
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        updateMediaSessionMeta()  // update dengan gambar
+                        updateMediaSessionMeta()
                         refreshNotif()
                     }
                 }
@@ -209,8 +201,6 @@ class MusicPlayerService : Service() {
     fun getDuration(): Int = try { mediaPlayer?.duration?.div(1000) ?: 0 } catch (e: Exception) { 0 }
     fun seekTo(seconds: Int) { try { mediaPlayer?.seekTo(seconds * 1000) } catch (e: Exception) {} }
 
-    // ── MediaPlayer ───────────────────────────────────────────────────────────
-
     private fun fetchStreamUrl(videoId: String): Pair<String, Map<String, String>> {
         val url = URL("$API_BASE/api/stream?videoId=$videoId")
         val conn = url.openConnection() as HttpURLConnection
@@ -223,7 +213,6 @@ class MusicPlayerService : Service() {
         val json = JSONObject(body)
         if (json.getString("status") != "success") throw Exception(json.optString("message"))
         val streamUrl = json.getString("url")
-        // Ambil headers dari API response jika ada
         val apiHeaders = mutableMapOf(
             "User-Agent" to "Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
             "Referer" to "https://www.youtube.com/",
@@ -243,7 +232,6 @@ class MusicPlayerService : Service() {
     }
 
     private fun startMediaPlayer(streamUrl: String, streamHeaders: Map<String, String> = emptyMap()) {
-        // Harus di main thread untuk MediaPlayer
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             try {
                 mediaPlayer?.release()
@@ -269,23 +257,22 @@ class MusicPlayerService : Service() {
                     setDataSource(applicationContext, uri, headers)
                     setOnPreparedListener { player ->
                         player.start()
-                        isNativePlaying = true
-                        isPlaying = true
+                        this@MusicPlayerService.isNativePlaying = true
+                        this@MusicPlayerService.isPlaying = true
                         updatePlaybackState()
                         refreshNotif()
                         Log.d(TAG, "MediaPlayer started, duration=${player.duration/1000}s")
-                        // Start periodic position update untuk progress bar di notifikasi
                         startPositionUpdater()
                     }
                     setOnCompletionListener {
-                        isNativePlaying = false
-                        isPlaying = false
+                        this@MusicPlayerService.isNativePlaying = false
+                        this@MusicPlayerService.isPlaying = false
                         onNext?.invoke()
                         Log.d(TAG, "MediaPlayer completed, calling onNext")
                     }
                     setOnErrorListener { _, what, extra ->
                         Log.e(TAG, "MediaPlayer error: what=$what extra=$extra")
-                        isNativePlaying = false
+                        this@MusicPlayerService.isNativePlaying = false
                         false
                     }
                     prepareAsync()
@@ -309,7 +296,6 @@ class MusicPlayerService : Service() {
                 if (isNativePlaying && mediaPlayer != null) {
                     try {
                         updatePlaybackState()
-                        // Kirim posisi ke Flutter via callback
                         val pos = mediaPlayer?.currentPosition?.div(1000) ?: 0
                         val dur = mediaPlayer?.duration?.div(1000) ?: 0
                         onPositionUpdate?.invoke(pos, dur)
@@ -351,8 +337,6 @@ class MusicPlayerService : Service() {
             audioManager?.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
         }
     }
-
-    // ── MediaSession ──────────────────────────────────────────────────────────
 
     private fun setupMediaSession() {
         mediaSession = MediaSessionCompat(this, "AuspotySession").apply {
@@ -400,14 +384,11 @@ class MusicPlayerService : Service() {
         )
     }
 
-    // ── Album Art ─────────────────────────────────────────────────────────────
-
     private fun fetchBitmap(url: String): android.graphics.Bitmap? {
         Log.d(TAG, "fetchBitmap: trying URL=$url")
         return try {
-            // Handle redirect manual
             var finalUrl = url
-            repeat(3) { // max 3 redirects
+            repeat(3) {
                 val conn = java.net.URL(finalUrl).openConnection() as java.net.HttpURLConnection
                 conn.instanceFollowRedirects = false
                 conn.connectTimeout = 8000
@@ -432,8 +413,6 @@ class MusicPlayerService : Service() {
             null
         }
     }
-
-    // ── Notification ─────────────────────────────────────────────────────────
 
     private fun refreshNotif() {
         notifManager?.notify(NOTIF_ID, buildNotif())
