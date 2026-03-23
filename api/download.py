@@ -18,14 +18,14 @@ def get_mp3_url(video_id):
     if init.get('error', 0) > 0:
         raise Exception('init error: ' + str(init.get('error')))
     convert_url = init['convertURL']
-    rnd2 = random.random()
-    conv = ymcdn_get(convert_url + '&v=' + video_id + '&f=mp3&_=' + str(rnd2))
+    conv = ymcdn_get(convert_url + '&v=' + video_id + '&f=mp3&_=' + str(random.random()))
     if conv.get('error', 0) > 0:
         raise Exception('convert error: ' + str(conv.get('error')))
     title = conv.get('title', video_id)
     progress_url = conv['progressURL']
     download_url = conv['downloadURL']
-    for _ in range(30):
+    # Poll up to 25 iterations (25 seconds max — stay under Vercel 30s limit)
+    for _ in range(25):
         time.sleep(1)
         prog = ymcdn_get(progress_url + '&_=' + str(random.random()))
         if prog.get('error', 0) > 0:
@@ -35,11 +35,25 @@ def get_mp3_url(video_id):
     raise Exception('timeout waiting for conversion')
 
 class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        import urllib.parse
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        video_id = params.get('video_id', params.get('videoId', ['']))[0].strip()
+        if not video_id:
+            self._json(400, {'status': 'error', 'message': 'video_id required'})
+            return
+        try:
+            dl_url, title = get_mp3_url(video_id)
+            self._json(200, {'status': 'success', 'url': dl_url, 'title': title, 'ext': 'mp3'})
+        except Exception as e:
+            self._json(500, {'status': 'error', 'message': str(e)[:200]})
+
     def do_POST(self):
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(length))
-            video_id = body.get('videoId', '').strip()
+            video_id = body.get('videoId', body.get('video_id', '')).strip()
             if not video_id:
                 self._json(400, {'status': 'error', 'message': 'videoId required'})
                 return
@@ -55,7 +69,7 @@ class handler(BaseHTTPRequestHandler):
 
     def _cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
     def _json(self, code, data):

@@ -171,31 +171,36 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   }
 
   Future<void> _download(String videoId, String title) async {
+    final t2 = title.replaceAll("'", "\\'");
     try {
-      final t2 = title.replaceAll("'", "\\'");
-      _wvc?.evaluateJavascript(source: "showToast('Mengunduh... tunggu 30-60 detik');");
-      if (Platform.isAndroid) await Permission.storage.request();
-      final apiRes = await http.post(
-        Uri.parse('$_base/api/download'),
-        headers: {'Content-Type': 'application/json'},
-        body: '{"videoId":"$videoId"}',
-      ).timeout(const Duration(seconds: 90));
-      if (apiRes.statusCode != 200) throw Exception('API \${apiRes.statusCode}');
+      _wvc?.evaluateJavascript(source: "showToast('Mengunduh... tunggu sebentar');");
+      if (Platform.isAndroid) {
+        final s = await Permission.storage.request();
+        if (!s.isGranted) await Permission.manageExternalStorage.request();
+      }
+      // Step 1: Get MP3 URL from API (API handles conversion, returns direct URL)
+      final apiRes = await http.get(
+        Uri.parse('$_base/api/download?video_id=$videoId'),
+      ).timeout(const Duration(seconds: 55));
+      if (apiRes.statusCode != 200) throw Exception('API ${apiRes.statusCode}');
       final apiJson = json.decode(apiRes.body) as Map<String, dynamic>;
       if (apiJson['status'] != 'success') throw Exception(apiJson['message']?.toString() ?? 'failed');
       final mp3Url   = apiJson['url'] as String;
       final mp3Title = (apiJson['title'] as String?) ?? title;
+      // Step 2: Download MP3 directly from CDN URL (not through Vercel)
+      _wvc?.evaluateJavascript(source: "showToast('Mengunduh file MP3...');");
       final dl = await http.get(Uri.parse(mp3Url)).timeout(const Duration(seconds: 120));
-      if (dl.statusCode != 200) throw Exception('DL \${dl.statusCode}');
+      if (dl.statusCode != 200) throw Exception('DL ${dl.statusCode}');
+      // Step 3: Save to Downloads folder
       final dir  = await getExternalStorageDirectory();
       final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
       final safe = mp3Title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final f    = File('\${base}Download/\$safe.mp3');
+      final f    = File('${base}Download/$safe.mp3');
       await f.parent.create(recursive: true);
       await f.writeAsBytes(dl.bodyBytes);
-      _wvc?.evaluateJavascript(source: "showToast('\u2713 Download selesai: \$t2');");
+      _wvc?.evaluateJavascript(source: "showToast('\u2713 Tersimpan: $t2');");
     } catch (e) {
-      _wvc?.evaluateJavascript(source: "showToast('Download gagal, coba lagi');");
+      _wvc?.evaluateJavascript(source: "showToast('Download gagal: ${e.toString().substring(0, e.toString().length > 40 ? 40 : e.toString().length)}');");
     }
   }
 
