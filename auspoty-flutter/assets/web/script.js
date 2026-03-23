@@ -502,6 +502,39 @@ function playMusicById(videoId) {
     const t = window._trackCache[videoId];
     if (t) playMusic(t.videoId, makeTrackData(t));
 }
+// Khusus untuk lagu yang sudah diunduh — langsung panggil playLocalFile
+// tanpa butuh _trackCache atau koneksi internet
+function playDownloadedSong(videoId, title, artist, img) {
+    // Update UI dulu
+    currentTrack = { videoId: videoId, title: title, artist: artist, img: img };
+    window.currentTrack = currentTrack;
+    var _mp = document.getElementById('miniPlayer');
+    var _mpi = document.getElementById('miniPlayerImg');
+    var _mpt = document.getElementById('miniPlayerTitle');
+    var _mpa = document.getElementById('miniPlayerArtist');
+    if (_mp) _mp.style.display = 'flex';
+    if (_mpi) _mpi.src = img;
+    if (_mpt) _mpt.innerText = title;
+    if (_mpa) _mpa.innerText = artist;
+    var _pa = document.getElementById('playerArt');
+    var _pt2 = document.getElementById('playerTitle');
+    var _par = document.getElementById('playerArtist');
+    var _pbg = document.getElementById('playerBg');
+    if (_pa) _pa.src = img;
+    if (_pt2) _pt2.innerText = title;
+    if (_par) _par.innerText = artist;
+    if (_pbg) _pbg.style.backgroundImage = "url('" + img + "')";
+    var _bar = document.getElementById('progressBar');
+    if (_bar) _bar.value = 0;
+    var _ct = document.getElementById('currentTime'); if (_ct) _ct.innerText = '0:00';
+    var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
+    // Langsung minta Flutter play dari file lokal — tidak perlu internet
+    if (window.flutter_inappwebview) {
+        try {
+            window.flutter_inappwebview.callHandler('playLocalFile', title, artist, img, videoId);
+        } catch(e) { showToast('Gagal memutar: ' + e); }
+    }
+}
 function renderVItem(t) {
     _cacheTrack(t);
     return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
@@ -510,10 +543,15 @@ function renderVItem(t) {
 }
 function renderDownloadedVItem(t) {
     _cacheTrack(t);
+    var vid = t.videoId;
+    var ttl = (t.title || '').replace(/'/g, "\\'");
+    var art = (t.artist || '').replace(/'/g, "\\'");
+    var img = getHighResImage(t.thumbnail || t.img || '');
+    var imgEsc = img.replace(/'/g, "\\'");
     return '<div class="v-item">' +
-        '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onclick="playMusicById(\'' + t.videoId + '\')">' +
-        '<div class="v-info" onclick="playMusicById(\'' + t.videoId + '\')"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div>' +
-        '<svg onclick="deleteDownloadedSong(\'' + t.videoId + '\')" viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.4);width:22px;height:22px;flex-shrink:0;cursor:pointer;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+        '<img loading="lazy" class="v-img" src="' + img + '" onclick="playDownloadedSong(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')">' +
+        '<div class="v-info" onclick="playDownloadedSong(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div>' +
+        '<svg onclick="deleteDownloadedSong(\'' + vid + '\')" viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.4);width:22px;height:22px;flex-shrink:0;cursor:pointer;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
         '</div>';
 }
 function renderHCard(t) {

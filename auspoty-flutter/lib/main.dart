@@ -25,20 +25,44 @@ Future<void> _startFileServer() async {
   try {
     _fileServer = await HttpServer.bind(InternetAddress.loopbackIPv4, _fileServerPort);
     _fileServer!.listen((req) async {
+      if (req.method == 'OPTIONS') {
+        req.response.headers.set('Access-Control-Allow-Origin', '*');
+        req.response.statusCode = 200;
+        await req.response.close();
+        return;
+      }
       final path = _servedFilePath;
       if (path == null) { req.response.statusCode = 404; await req.response.close(); return; }
       final f = File(path);
       if (!await f.exists()) { req.response.statusCode = 404; await req.response.close(); return; }
-      final ext = path.split('.').last.toLowerCase();
+      final ext  = path.split('.').last.toLowerCase();
       final mime = ext == 'webm' ? 'audio/webm' : ext == 'mp3' ? 'audio/mpeg' : 'audio/mp4';
       final bytes = await f.readAsBytes();
+      final total = bytes.length;
       req.response.headers.set('Content-Type', mime);
-      req.response.headers.set('Content-Length', bytes.length.toString());
+      req.response.headers.set('Accept-Ranges', 'bytes');
       req.response.headers.set('Access-Control-Allow-Origin', '*');
-      req.response.add(bytes);
+      // Support range requests so audio seeking works
+      final rangeHeader = req.headers.value('range');
+      if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+        final parts = rangeHeader.substring(6).split('-');
+        final start = int.tryParse(parts[0]) ?? 0;
+        final end   = (parts.length > 1 && parts[1].isNotEmpty)
+            ? (int.tryParse(parts[1]) ?? (total - 1))
+            : (total - 1);
+        final chunk = bytes.sublist(start, end + 1);
+        req.response.statusCode = 206;
+        req.response.headers.set('Content-Range', 'bytes $start-$end/$total');
+        req.response.headers.set('Content-Length', chunk.length.toString());
+        req.response.add(chunk);
+      } else {
+        req.response.statusCode = 200;
+        req.response.headers.set('Content-Length', total.toString());
+        req.response.add(bytes);
+      }
       await req.response.close();
     });
-  } catch (_) {}
+  } catch (_) { _fileServer = null; }
 }
 
 void main() async {
@@ -537,6 +561,15 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
               },
 
               onProgressChanged: (c, p) { if (p == 100) setState(() => _loading = false); },
+
+              onReceivedError: (c, req, err) async {
+                // Saat offline, coba load dari cache
+                if (req.isForMainFrame == true) {
+                  setState(() => _loading = false);
+                  // Restart file server jika mati
+                  if (_fileServer == null) await _startFileServer();
+                }
+              },
 
               onPermissionRequest: (c, req) async =>
                   PermissionResponse(resources: req.resources, action: PermissionResponseAction.GRANT),
