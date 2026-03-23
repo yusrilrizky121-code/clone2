@@ -1,42 +1,57 @@
 from http.server import BaseHTTPRequestHandler
-import json, urllib.request, urllib.error, time, random
+import json, urllib.request, urllib.error, urllib.parse, re
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
-    'Referer': 'https://id.ytmp3.mobi/v1/',
-    'Origin': 'https://id.ytmp3.mobi',
-}
+# Use pytubefix to extract direct audio stream URL from YouTube
+# Flutter then downloads directly from YouTube CDN (no server-side download)
 
-def ymcdn_get(url):
-    req = urllib.request.Request(url, headers=HEADERS)
-    r = urllib.request.urlopen(req, timeout=15)
-    return json.loads(r.read().decode())
+def get_audio_stream_url(video_id):
+    """Extract direct audio stream URL using pytubefix."""
+    try:
+        from pytubefix import YouTube
+        yt = YouTube(f'https://www.youtube.com/watch?v={video_id}')
+        title = yt.title or video_id
+        # Get best audio stream (webm/mp4 audio only)
+        stream = yt.streams.filter(only_audio=True).order_by('abr').last()
+        if not stream:
+            stream = yt.streams.filter(progressive=False).order_by('abr').last()
+        if not stream:
+            raise Exception('No audio stream found')
+        url = stream.url
+        ext = 'mp4'  # YouTube audio streams are usually mp4/webm
+        if 'mime_type' in dir(stream):
+            mt = stream.mime_type or ''
+            if 'webm' in mt:
+                ext = 'webm'
+        return url, title, ext
+    except ImportError:
+        pass
 
-def get_mp3_url(video_id):
-    rnd = random.random()
-    init = ymcdn_get('https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_=' + str(rnd))
-    if init.get('error', 0) > 0:
-        raise Exception('init error: ' + str(init.get('error')))
-    convert_url = init['convertURL']
-    conv = ymcdn_get(convert_url + '&v=' + video_id + '&f=mp3&_=' + str(random.random()))
-    if conv.get('error', 0) > 0:
-        raise Exception('convert error: ' + str(conv.get('error')))
-    title = conv.get('title', video_id)
-    progress_url = conv['progressURL']
-    download_url = conv['downloadURL']
-    # Poll up to 25 iterations (25 seconds max — stay under Vercel 30s limit)
-    for _ in range(25):
-        time.sleep(1)
-        prog = ymcdn_get(progress_url + '&_=' + str(random.random()))
-        if prog.get('error', 0) > 0:
-            raise Exception('progress error: ' + str(prog.get('error')))
-        if prog.get('progress', 0) >= 3:
-            return prog.get('downloadURL') or download_url, title
-    raise Exception('timeout waiting for conversion')
+    # Fallback: use yt-dlp if pytubefix not available
+    try:
+        import yt_dlp
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(
+                f'https://www.youtube.com/watch?v={video_id}',
+                download=False
+            )
+            url = info.get('url') or info.get('formats', [{}])[-1].get('url', '')
+            title = info.get('title', video_id)
+            ext = info.get('ext', 'mp4')
+            if not url:
+                raise Exception('No URL in yt-dlp info')
+            return url, title, ext
+    except Exception as e:
+        raise Exception(f'yt-dlp failed: {e}')
+
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        import urllib.parse
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
         video_id = params.get('video_id', params.get('videoId', ['']))[0].strip()
@@ -44,10 +59,15 @@ class handler(BaseHTTPRequestHandler):
             self._json(400, {'status': 'error', 'message': 'video_id required'})
             return
         try:
-            dl_url, title = get_mp3_url(video_id)
-            self._json(200, {'status': 'success', 'url': dl_url, 'title': title, 'ext': 'mp3'})
+            url, title, ext = get_audio_stream_url(video_id)
+            self._json(200, {
+                'status': 'success',
+                'url': url,
+                'title': title,
+                'ext': ext,
+            })
         except Exception as e:
-            self._json(500, {'status': 'error', 'message': str(e)[:200]})
+            self._json(500, {'status': 'error', 'message': str(e)[:300]})
 
     def do_POST(self):
         try:
@@ -57,10 +77,10 @@ class handler(BaseHTTPRequestHandler):
             if not video_id:
                 self._json(400, {'status': 'error', 'message': 'videoId required'})
                 return
-            dl_url, title = get_mp3_url(video_id)
-            self._json(200, {'status': 'success', 'url': dl_url, 'title': title, 'ext': 'mp3'})
+            url, title, ext = get_audio_stream_url(video_id)
+            self._json(200, {'status': 'success', 'url': url, 'title': title, 'ext': ext})
         except Exception as e:
-            self._json(500, {'status': 'error', 'message': str(e)[:200]})
+            self._json(500, {'status': 'error', 'message': str(e)[:300]})
 
     def do_OPTIONS(self):
         self.send_response(200)

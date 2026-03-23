@@ -180,7 +180,7 @@ function playMusic(videoId, encodedData) {
                 // Lagu ada di unduhan — minta Flutter play dari file lokal
                 try {
                     window.flutter_inappwebview.callHandler('playLocalFile',
-                        currentTrack.title || '', currentTrack.artist || '', currentTrack.img || '');
+                        currentTrack.title || '', currentTrack.artist || '', currentTrack.img || '', videoId);
                 } catch(err) {
                     // Fallback ke stream online
                     if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
@@ -967,8 +967,7 @@ function downloadMusic() {
         showToast('Mengunduh... tunggu sebentar');
         try {
             window.flutter_inappwebview.callHandler('downloadTrack', currentTrack.videoId, currentTrack.title || 'lagu');
-            // Save metadata to IndexedDB so it appears in Koleksi > Lagu Diunduh
-            saveDownloadedSong(currentTrack);
+            // Note: saveDownloadedSong is called by Flutter after download completes
         } catch(e) { showToast('Download gagal, coba lagi'); }
         return;
     }

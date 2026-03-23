@@ -1,2 +1,2 @@
 requests>=2.22
-yt-dlp>=2024.1.0
+pytubefix>=6.0.0

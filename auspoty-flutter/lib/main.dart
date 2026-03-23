@@ -15,8 +15,35 @@ const _ch = MethodChannel('com.auspoty.app/music');
 final _keepAlive = InAppWebViewKeepAlive();
 const _base = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
 
+// Simple local file server for serving downloaded audio to WebView
+HttpServer? _fileServer;
+String? _servedFilePath;
+int _fileServerPort = 8765;
+
+Future<void> _startFileServer() async {
+  if (_fileServer != null) return;
+  try {
+    _fileServer = await HttpServer.bind(InternetAddress.loopbackIPv4, _fileServerPort);
+    _fileServer!.listen((req) async {
+      final path = _servedFilePath;
+      if (path == null) { req.response.statusCode = 404; await req.response.close(); return; }
+      final f = File(path);
+      if (!await f.exists()) { req.response.statusCode = 404; await req.response.close(); return; }
+      final ext = path.split('.').last.toLowerCase();
+      final mime = ext == 'webm' ? 'audio/webm' : ext == 'mp3' ? 'audio/mpeg' : 'audio/mp4';
+      final bytes = await f.readAsBytes();
+      req.response.headers.set('Content-Type', mime);
+      req.response.headers.set('Content-Length', bytes.length.toString());
+      req.response.headers.set('Access-Control-Allow-Origin', '*');
+      req.response.add(bytes);
+      await req.response.close();
+    });
+  } catch (_) {}
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _startFileServer();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -180,29 +207,44 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         final s = await Permission.storage.request();
         if (!s.isGranted) await Permission.manageExternalStorage.request();
       }
-      // Step 1: Get MP3 URL from API (API handles conversion, returns direct URL)
+      // Step 1: Get audio stream URL from API
       final apiRes = await http.get(
         Uri.parse('$_base/api/download?video_id=$videoId'),
       ).timeout(const Duration(seconds: 55));
       if (apiRes.statusCode != 200) throw Exception('API ${apiRes.statusCode}');
       final apiJson = json.decode(apiRes.body) as Map<String, dynamic>;
       if (apiJson['status'] != 'success') throw Exception(apiJson['message']?.toString() ?? 'failed');
-      final mp3Url   = apiJson['url'] as String;
-      final mp3Title = (apiJson['title'] as String?) ?? title;
-      // Step 2: Download MP3 directly from CDN URL (not through Vercel)
-      _wvc?.evaluateJavascript(source: "showToast('Mengunduh file MP3...');");
-      final dl = await http.get(Uri.parse(mp3Url)).timeout(const Duration(seconds: 120));
-      if (dl.statusCode != 200) throw Exception('DL ${dl.statusCode}');
+      final streamUrl = apiJson['url'] as String;
+      final apiTitle  = (apiJson['title'] as String?) ?? title;
+      final ext       = (apiJson['ext'] as String?) ?? 'mp4';
+      // Step 2: Download audio directly from YouTube CDN
+      _wvc?.evaluateJavascript(source: "showToast('Mengunduh audio...');");
+      final dlReq = http.Request('GET', Uri.parse(streamUrl));
+      dlReq.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36';
+      dlReq.headers['Referer'] = 'https://www.youtube.com/';
+      final dlStream = await http.Client().send(dlReq).timeout(const Duration(seconds: 120));
+      if (dlStream.statusCode != 200) throw Exception('DL ${dlStream.statusCode}');
+      final bytes = await dlStream.stream.toBytes().timeout(const Duration(seconds: 120));
       // Step 3: Save to Downloads folder
       final dir  = await getExternalStorageDirectory();
       final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
-      final safe = mp3Title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final f    = File('${base}Download/$safe.mp3');
+      final safe = apiTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final f    = File('${base}Download/$safe.$ext');
       await f.parent.create(recursive: true);
-      await f.writeAsBytes(dl.bodyBytes);
-      _wvc?.evaluateJavascript(source: "showToast('\u2713 Tersimpan: $t2');");
+      await f.writeAsBytes(bytes);
+      // Step 4: Save metadata to IndexedDB so it shows in Koleksi > Lagu Diunduh
+      await _wvc?.evaluateJavascript(source: """
+        (function(){
+          if(typeof saveDownloadedSong==='function' && window.currentTrack){
+            saveDownloadedSong(window.currentTrack);
+          }
+          showToast('\u2713 Tersimpan: $t2');
+        })();
+      """);
     } catch (e) {
-      _wvc?.evaluateJavascript(source: "showToast('Download gagal: ${e.toString().substring(0, e.toString().length > 40 ? 40 : e.toString().length)}');");
+      final msg = e.toString();
+      final short = msg.length > 60 ? msg.substring(0, 60) : msg;
+      _wvc?.evaluateJavascript(source: "showToast('Download gagal: ${short.replaceAll("'", "\\'")}');");
     }
   }
 
@@ -319,13 +361,19 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                     final title  = args.isNotEmpty ? args[0].toString() : 'Auspoty';
                     final artist = args.length > 1 ? args[1].toString() : '';
                     final img    = args.length > 2 ? args[2].toString() : '';
-                    // Find the MP3 file in Downloads folder
+                    // Find the audio file in Downloads folder (mp4/webm/mp3)
                     try {
                       final dir  = await getExternalStorageDirectory();
                       final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
                       final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-                      final f    = File('${base}Download/$safe.mp3');
-                      if (await f.exists()) {
+                      // Try common extensions
+                      File? found;
+                      String? foundExt;
+                      for (final ext in ['mp4', 'webm', 'mp3', 'm4a']) {
+                        final f = File('${base}Download/$safe.$ext');
+                        if (await f.exists()) { found = f; foundExt = ext; break; }
+                      }
+                      if (found != null) {
                         // Notify native service for notification
                         try {
                           await _ch.invokeMethod('updateTrack', {
@@ -333,14 +381,15 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                             'isPlaying': true, 'imgUrl': img,
                           });
                         } catch (_) {}
-                        // Send file:// URL back to JS to play via HTML5 audio
-                        final fileUrl = 'file://${f.path}';
+                        // Point local server to this file, then give WebView a localhost URL
+                        _servedFilePath = found.path;
+                        final localUrl = 'http://127.0.0.1:$_fileServerPort/audio.$foundExt';
                         await c.evaluateJavascript(source: """
                           (function(){
                             var au = document.getElementById('bgAudio');
                             if (!au) { au = document.createElement('audio'); au.id='bgAudio'; au.style.display='none'; document.body.appendChild(au); }
-                            au.src = '${fileUrl.replaceAll("'", "\\'")}';
-                            au.play().catch(function(){});
+                            au.src = '${localUrl.replaceAll("'", "\\'")}';
+                            au.play().catch(function(e){ console.log('local play err',e); });
                             window._localAudioPlaying = true;
                           })();
                         """);
@@ -349,12 +398,16 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                         await c.evaluateJavascript(source: """
                           (function(){
                             window._localAudioPlaying = false;
-                            if(window.ytPlayer && window.ytPlayer.loadVideoById) window.ytPlayer.loadVideoById(window.currentTrack.videoId);
+                            if(window.ytPlayer && window.ytPlayer.loadVideoById && window.currentTrack)
+                              window.ytPlayer.loadVideoById(window.currentTrack.videoId);
                           })();
                         """);
                       }
                     } catch (e) {
-                      await c.evaluateJavascript(source: "if(window.ytPlayer&&window.ytPlayer.loadVideoById) window.ytPlayer.loadVideoById(window.currentTrack.videoId);");
+                      await c.evaluateJavascript(source: """
+                        if(window.ytPlayer&&window.ytPlayer.loadVideoById&&window.currentTrack)
+                          window.ytPlayer.loadVideoById(window.currentTrack.videoId);
+                      """);
                     }
                   },
                 );
@@ -433,7 +486,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 final url = nav.request.url?.toString() ?? '';
                 const ok = ['vercel.app','youtube.com','ytimg.com','googleapis.com',
                   'gstatic.com','firebaseapp.com','firebase.google.com',
-                  'accounts.google.com','google.com','googleusercontent.com'];
+                  'accounts.google.com','google.com','googleusercontent.com',
+                  '127.0.0.1','localhost'];
                 for (final d in ok) { if (url.contains(d)) return NavigationActionPolicy.ALLOW; }
                 if (url.startsWith('about:') || url.startsWith('blob:') || url.startsWith('data:')) return NavigationActionPolicy.ALLOW;
                 if (url.startsWith('http') && nav.isForMainFrame) {
@@ -492,7 +546,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
           html,body{-webkit-overflow-scrolling:touch!important;scroll-behavior:auto!important;}
           .v-item,.lib-item{content-visibility:visible!important;contain:none!important;}
           .view-section.active{contain:none!important;}
-          *{transition-duration:0.1s!important;}
           .modal-overlay{transition:none!important;}
           @keyframes slideUpMini{from{opacity:0}to{opacity:1}}
           @keyframes slideUp{from{opacity:0}to{opacity:1}}

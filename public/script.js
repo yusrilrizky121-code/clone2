@@ -949,7 +949,7 @@ function downloadMusic() {
         showToast('Mengunduh... tunggu sebentar');
         try {
             window.flutter_inappwebview.callHandler('downloadTrack', currentTrack.videoId, currentTrack.title || 'lagu');
-            saveDownloadedSong(currentTrack);
+            // Note: saveDownloadedSong is called by Flutter after download completes
         } catch(e) { showToast('Download gagal, coba lagi'); }
         return;
     }
