@@ -988,30 +988,15 @@ function clearLikedSongs() {
 // DOWNLOAD
 function downloadMusic() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
-    // APK mode: delegate to Flutter native downloader
     if (window.flutter_inappwebview) {
-        showToast('Mengunduh... tunggu sebentar');
+        showToast('Mengonversi lagu... tunggu sebentar');
         try {
             window.flutter_inappwebview.callHandler('downloadTrack', currentTrack.videoId, currentTrack.title || 'lagu');
-            // Note: saveDownloadedSong is called by Flutter after download completes
         } catch(e) { showToast('Download gagal, coba lagi'); }
         return;
     }
-    // Web/PWA fallback
-    showToast('Memulai unduhan...');
-    fetch('/api/download?video_id=' + currentTrack.videoId)
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-            if (data.status !== 'success') throw new Error(data.message || 'failed');
-            var a = document.createElement('a');
-            a.href = data.url;
-            a.download = (data.title || currentTrack.title || 'music') + '.mp3';
-            a.target = '_blank';
-            document.body.appendChild(a); a.click();
-            document.body.removeChild(a);
-            saveDownloadedSong(currentTrack);
-            showToast('Unduhan dimulai!');
-        }).catch(function(e) { showToast('Gagal mengunduh: ' + (e.message||'')); });
+    // Web/PWA: not supported
+    showToast('Download hanya tersedia di aplikasi APK');
 }
 
 // GOOGLE AUTH

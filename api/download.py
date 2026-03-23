@@ -1,65 +1,52 @@
 from http.server import BaseHTTPRequestHandler
-import json, urllib.parse
+import json, urllib.parse, urllib.request, random, time
 
-def get_audio_url(video_id):
-    """Get direct audio stream URL using yt-dlp android_music client."""
-    import yt_dlp
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
+    'Referer': 'https://id.ytmp3.mobi/',
+    'Origin': 'https://id.ytmp3.mobi',
+}
 
-    ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best',
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': False,
-        'skip_download': True,
-        'noplaylist': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android_music', 'android'],
+def _get(url):
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=12) as r:
+        return json.loads(r.read().decode())
+
+def get_download_url(video_id):
+    # Step 1: init — get convertURL with sig
+    rnd = random.random()
+    init = _get(f'https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_={rnd}')
+    if init.get('error', 0) != 0:
+        raise Exception('init error: ' + str(init))
+    convert_url = init['convertURL']
+
+    # Step 2: convert — submit video_id
+    rnd2 = random.random()
+    conv = _get(f'{convert_url}&v={video_id}&f=mp3&_={rnd2}')
+    if conv.get('error', 0) != 0:
+        raise Exception('convert error: ' + str(conv))
+
+    progress_url = conv['progressURL']
+    download_url = conv['downloadURL']
+    title = conv.get('title', video_id)
+
+    # Step 3: poll progress until ready (progress == 3)
+    for _ in range(25):
+        time.sleep(1.2)
+        rnd3 = random.random()
+        prog = _get(f'{progress_url}&_={rnd3}')
+        if prog.get('error', 0) != 0:
+            raise Exception('progress error: ' + str(prog))
+        if prog.get('progress', 0) >= 3:
+            final_url = prog.get('downloadURL') or download_url
+            return {
+                'url': final_url,
+                'title': prog.get('title') or title,
+                'ext': 'mp3',
+                'headers': dict(HEADERS),
             }
-        },
-    }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(
-            f'https://www.youtube.com/watch?v={video_id}',
-            download=False
-        )
-
-    formats = info.get('formats', [])
-    # Prefer audio-only formats
-    audio = [
-        f for f in formats
-        if f.get('vcodec') == 'none'
-        and f.get('acodec') not in ('none', None)
-        and f.get('url')
-        and f.get('ext') not in ('mhtml', 'none', None)
-        and 'storyboard' not in (f.get('url') or '')
-    ]
-    if not audio:
-        audio = [
-            f for f in formats
-            if f.get('url')
-            and f.get('acodec') not in ('none', None)
-            and f.get('ext') not in ('mhtml',)
-            and 'storyboard' not in (f.get('url') or '')
-        ]
-    if not audio:
-        raise Exception('No audio format found')
-
-    # Prefer m4a/mp4, fallback to webm
-    m4a = [f for f in audio if f.get('ext', '') in ('m4a', 'mp4')]
-    chosen = sorted(m4a or audio, key=lambda x: (x.get('abr') or x.get('tbr') or 0), reverse=True)[0]
-
-    ext = chosen.get('ext', 'mp4')
-    if ext not in ('mp4', 'm4a', 'webm', 'mp3'):
-        ext = 'mp4'
-
-    return {
-        'url': chosen['url'],
-        'title': info.get('title', video_id),
-        'ext': ext,
-        'headers': chosen.get('http_headers', {}),
-    }
+    raise Exception('Timeout waiting for conversion')
 
 
 class handler(BaseHTTPRequestHandler):
@@ -71,7 +58,7 @@ class handler(BaseHTTPRequestHandler):
             self._json(400, {'status': 'error', 'message': 'video_id required'})
             return
         try:
-            result = get_audio_url(video_id)
+            result = get_download_url(video_id)
             self._json(200, {'status': 'success', **result})
         except Exception as e:
             self._json(500, {'status': 'error', 'message': str(e)[:300]})

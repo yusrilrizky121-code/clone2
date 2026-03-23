@@ -202,48 +202,48 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   Future<void> _download(String videoId, String title) async {
     final t2 = title.replaceAll("'", "\\'");
     try {
-      _wvc?.evaluateJavascript(source: "showToast('Mengunduh... tunggu sebentar');");
+      _wvc?.evaluateJavascript(source: "showToast('Mengonversi lagu... tunggu sebentar');");
       if (Platform.isAndroid) {
         final s = await Permission.storage.request();
         if (!s.isGranted) await Permission.manageExternalStorage.request();
       }
-      // Step 1: Get audio stream URL from API
+
+      // Step 1: Call our API which uses ytmp3.mobi to get MP3 download URL
       final apiRes = await http.get(
         Uri.parse('$_base/api/download?video_id=$videoId'),
-      ).timeout(const Duration(seconds: 55));
-      if (apiRes.statusCode != 200) throw Exception('API ${apiRes.statusCode}');
+        headers: {'User-Agent': 'Mozilla/5.0'},
+      ).timeout(const Duration(seconds: 58));
+      if (apiRes.statusCode != 200) throw Exception('API error ${apiRes.statusCode}');
       final apiJson = json.decode(apiRes.body) as Map<String, dynamic>;
       if (apiJson['status'] != 'success') throw Exception(apiJson['message']?.toString() ?? 'failed');
-      final streamUrl = apiJson['url'] as String;
-      final apiTitle  = (apiJson['title'] as String?) ?? title;
-      final ext       = (apiJson['ext'] as String?) ?? 'mp4';
-      final apiHeaders = (apiJson['headers'] as Map<String, dynamic>?) ?? {};
-      // Step 2: Download audio directly from YouTube CDN
-      _wvc?.evaluateJavascript(source: "showToast('Mengunduh audio...');");
-      final dlReq = http.Request('GET', Uri.parse(streamUrl));
-      // Apply headers from API (YouTube CDN requires specific headers)
-      apiHeaders.forEach((k, v) { try { dlReq.headers[k] = v.toString(); } catch (_) {} });
-      if (!dlReq.headers.containsKey('User-Agent')) {
-        dlReq.headers['User-Agent'] = 'com.google.android.youtube/17.36.4 (Linux; U; Android 12) gzip';
-      }
+
+      final dlUrl   = apiJson['url'] as String;
+      final apiTitle = (apiJson['title'] as String?) ?? title;
+      final ext      = (apiJson['ext'] as String?) ?? 'mp3';
+
+      // Step 2: Download MP3 bytes in background (no browser, no Chrome)
+      _wvc?.evaluateJavascript(source: "showToast('Mengunduh MP3...');");
+      final dlReq = http.Request('GET', Uri.parse(dlUrl));
+      dlReq.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120';
+      dlReq.headers['Referer'] = 'https://id.ytmp3.mobi/';
       final dlStream = await http.Client().send(dlReq).timeout(const Duration(seconds: 120));
-      if (dlStream.statusCode != 200) throw Exception('DL ${dlStream.statusCode}');
+      if (dlStream.statusCode != 200) throw Exception('Download error ${dlStream.statusCode}');
       final bytes = await dlStream.stream.toBytes().timeout(const Duration(seconds: 120));
-      // Step 3: Save to Downloads folder
-      final dir  = await getExternalStorageDirectory();
-      final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
-      final safe = apiTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-      final f    = File('${base}Download/$safe.$ext');
-      await f.parent.create(recursive: true);
+
+      // Step 3: Save file to internal app storage (no external permission needed)
+      final appDir = await getApplicationDocumentsDirectory();
+      final safe   = apiTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final f      = File('${appDir.path}/$safe.$ext');
       await f.writeAsBytes(bytes);
-      // Step 4: Save metadata to IndexedDB so it shows in Koleksi > Lagu Diunduh
-      // Also store videoId→filename mapping for offline playback lookup
-      final prefs = await SharedPreferences.getInstance();
+
+      // Step 4: Store videoId→file mapping in SharedPreferences
+      final prefs   = await SharedPreferences.getInstance();
       final mapJson = prefs.getString('downloadedFiles') ?? '{}';
       final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
       fileMap[videoId] = {'filename': safe, 'ext': ext, 'title': apiTitle};
       await prefs.setString('downloadedFiles', json.encode(fileMap));
 
+      // Step 5: Save to IndexedDB so it shows in Koleksi > Lagu Diunduh
       await _wvc?.evaluateJavascript(source: """
         (function(){
           var track = {
@@ -253,11 +253,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             img: window.currentTrack ? (window.currentTrack.img || '') : ''
           };
           if(typeof saveDownloadedSong==='function') saveDownloadedSong(track);
-          showToast('\u2713 Tersimpan: $t2');
+          showToast('\u2713 Tersimpan: ${t2.length > 30 ? t2.substring(0, 30) : t2}');
         })();
       """);
     } catch (e) {
-      final msg = e.toString();
+      final msg   = e.toString();
       final short = msg.length > 60 ? msg.substring(0, 60) : msg;
       _wvc?.evaluateJavascript(source: "showToast('Download gagal: ${short.replaceAll("'", "\\'")}');");
     }
@@ -373,27 +373,26 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 c.addJavaScriptHandler(
                   handlerName: 'playLocalFile',
                   callback: (args) async {
-                    final title  = args.isNotEmpty ? args[0].toString() : 'Auspoty';
-                    final artist = args.length > 1 ? args[1].toString() : '';
-                    final img    = args.length > 2 ? args[2].toString() : '';
+                    final title   = args.isNotEmpty ? args[0].toString() : 'Auspoty';
+                    final artist  = args.length > 1 ? args[1].toString() : '';
+                    final img     = args.length > 2 ? args[2].toString() : '';
                     final videoId = args.length > 3 ? args[3].toString() : '';
-                    // Find the audio file in Downloads folder (mp4/webm/mp3)
                     try {
-                      final dir  = await getExternalStorageDirectory();
-                      final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
-                      // First try: look up exact filename from SharedPreferences map
+                      // Look up exact filename from SharedPreferences map
                       File? found;
                       String? foundExt;
+                      final appDir = await getApplicationDocumentsDirectory();
+
                       if (videoId.isNotEmpty) {
-                        final prefs = await SharedPreferences.getInstance();
+                        final prefs   = await SharedPreferences.getInstance();
                         final mapJson = prefs.getString('downloadedFiles') ?? '{}';
                         final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
                         if (fileMap.containsKey(videoId)) {
                           final info = fileMap[videoId] as Map<String, dynamic>;
-                          final fn = info['filename']?.toString() ?? '';
-                          final ex = info['ext']?.toString() ?? 'mp4';
+                          final fn   = info['filename']?.toString() ?? '';
+                          final ex   = info['ext']?.toString() ?? 'mp3';
                           if (fn.isNotEmpty) {
-                            final f = File('${base}Download/$fn.$ex');
+                            final f = File('${appDir.path}/$fn.$ex');
                             if (await f.exists()) { found = f; foundExt = ex; }
                           }
                         }
@@ -401,8 +400,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                       // Fallback: search by sanitized title
                       if (found == null) {
                         final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-                        for (final ext in ['mp4', 'webm', 'mp3', 'm4a']) {
-                          final f = File('${base}Download/$safe.$ext');
+                        for (final ext in ['mp3', 'mp4', 'webm', 'm4a']) {
+                          final f = File('${appDir.path}/$safe.$ext');
                           if (await f.exists()) { found = f; foundExt = ext; break; }
                         }
                       }
