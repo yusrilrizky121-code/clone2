@@ -288,6 +288,19 @@
         </div>
     </div>
 
+    <!-- Tombol Admin (hanya tampil untuk yusrilrizky149@gmail.com) -->
+    <div id="adminAnnouncementBtn" class="settings-group" style="margin-bottom:0;cursor:pointer;display:none;" onclick="openAnnouncementPanel()">
+        <div class="settings-item">
+            <div class="settings-item-left">
+                <div class="settings-icon" style="background:linear-gradient(135deg,#a78bfa,#f472b6);padding:6px;">
+                    <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:white;"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/><path d="M7 9h10v2H7zm0-3h10v2H7zm0 6h7v2H7z"/></svg>
+                </div>
+                <div><div class="settings-item-title" style="background:linear-gradient(135deg,#a78bfa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Panel Admin</div><div class="settings-item-sub">Kirim pengumuman ke semua pengguna</div></div>
+            </div>
+            <svg viewBox="0 0 24 24" class="settings-chevron"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+        </div>
+    </div>
+
     <!-- Tampilan -->
     <div class="settings-group-label">Tampilan</div>
     <div class="settings-group">
@@ -425,6 +438,20 @@
             <div class="settings-item-left">
                 <div class="settings-icon" style="background:#2d6a4f;"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg></div>
                 <div><div class="settings-item-title">Versi Aplikasi</div><div class="settings-item-sub">Auspoty v5.2.0</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel — hanya muncul kalau login dengan gmail admin -->
+    <div id="adminPanelSection" style="display:none;">
+        <div class="settings-group-label" style="color:#a78bfa;">⚡ Admin</div>
+        <div class="settings-group">
+            <div class="settings-item" onclick="openAdminPanel()">
+                <div class="settings-item-left">
+                    <div class="settings-icon" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);"><svg viewBox="0 0 24 24" style="fill:white;"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg></div>
+                    <div><div class="settings-item-title" style="color:#a78bfa;">Kirim Pengumuman</div><div class="settings-item-sub">Kirim notifikasi ke semua pengguna</div></div>
+                </div>
+                <svg viewBox="0 0 24 24" class="settings-chevron"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
             </div>
         </div>
     </div>
@@ -623,6 +650,45 @@
 
 <div id="youtube-player" style="display:none;"></div>
 
+<!-- ANNOUNCEMENT MODAL -->
+<div id="announcementModal" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;">
+    <div style="background:#1a1a2e;border-radius:20px;padding:28px 22px 24px;width:90%;max-width:360px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.8);position:relative;">
+        <div id="announcementIcon" style="font-size:44px;margin-bottom:10px;">📢</div>
+        <h2 id="announcementTitle" style="color:white;font-size:20px;font-weight:700;margin-bottom:8px;"></h2>
+        <p id="announcementMessage" style="color:rgba(255,255,255,0.7);font-size:14px;line-height:1.6;margin-bottom:24px;"></p>
+        <button onclick="closeAnnouncementModal()" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:white;border:none;border-radius:30px;padding:12px 32px;font-size:15px;font-weight:700;cursor:pointer;width:100%;">Oke, Mengerti</button>
+    </div>
+</div>
+
+<!-- ADMIN ANNOUNCEMENT PANEL -->
+<div id="adminAnnouncementModal" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.9);align-items:flex-end;justify-content:center;">
+    <div style="background:#1a1a2e;width:100%;border-radius:20px 20px 0 0;padding:24px 20px 40px;max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h3 style="font-size:18px;font-weight:700;color:white;">📢 Kirim Pengumuman</h3>
+            <div onclick="closeAdminPanel()" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:white;font-size:18px;">✕</div>
+        </div>
+        <div style="margin-bottom:14px;">
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Judul Pengumuman</label>
+            <input id="adminAnnTitle" type="text" placeholder="Contoh: Update v7.0 Rilis!" style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:12px 14px;color:white;font-size:14px;outline:none;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:14px;">
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Pesan</label>
+            <textarea id="adminAnnMessage" placeholder="Tulis isi pengumuman..." style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:12px 14px;color:white;font-size:14px;outline:none;resize:none;height:100px;font-family:inherit;box-sizing:border-box;"></textarea>
+        </div>
+        <div style="margin-bottom:20px;">
+            <label style="font-size:12px;color:rgba(255,255,255,0.5);display:block;margin-bottom:6px;">Tipe</label>
+            <select id="adminAnnType" style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:12px 14px;color:white;font-size:14px;outline:none;">
+                <option value="info">ℹ️ Info</option>
+                <option value="update">🚀 Update</option>
+                <option value="warning">⚠️ Peringatan</option>
+                <option value="promo">🎉 Promo</option>
+            </select>
+        </div>
+        <button onclick="sendAdminAnnouncement()" style="width:100%;background:linear-gradient(135deg,#a78bfa,#7c3aed);color:white;border:none;border-radius:30px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">Kirim ke Semua Pengguna</button>
+        <button onclick="clearAnnouncement()" style="width:100%;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.15);border-radius:30px;padding:12px;font-size:14px;cursor:pointer;">Hapus Pengumuman Aktif</button>
+    </div>
+</div>
+
 <!-- EDIT PROFILE MODAL -->
 <div id="editProfileModal" style="display:none;position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,0.85);display:none;justify-content:center;align-items:flex-end;">
     <div style="background:var(--bg-card);width:100%;border-radius:20px 20px 0 0;padding:24px 20px 40px;">
@@ -667,6 +733,40 @@
             Masuk dengan Google
         </button>
         <button onclick="closeLoginModal()" style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);padding:10px 28px;border-radius:20px;font-size:13px;cursor:pointer;width:100%;">Nanti saja</button>
+    </div>
+</div>
+
+<!-- ADMIN ANNOUNCEMENT MODAL -->
+<div id="announcementModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#1a1a2e;border-radius:20px;padding:24px;width:100%;max-width:420px;border:1px solid rgba(167,139,250,0.3);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#a78bfa,#f472b6);display:flex;align-items:center;justify-content:center;">
+                    <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:white;"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                </div>
+                <span style="color:white;font-size:17px;font-weight:700;">Kirim Pengumuman</span>
+            </div>
+            <button onclick="closeAnnouncementPanel()" style="background:rgba(255,255,255,0.1);border:none;color:white;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;">&times;</button>
+        </div>
+        <div style="margin-bottom:14px;">
+            <label style="color:rgba(255,255,255,0.6);font-size:12px;display:block;margin-bottom:6px;">JUDUL</label>
+            <input id="annTitle" type="text" placeholder="Contoh: Update Baru v8.0" style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;color:white;font-size:14px;outline:none;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:14px;">
+            <label style="color:rgba(255,255,255,0.6);font-size:12px;display:block;margin-bottom:6px;">PESAN</label>
+            <textarea id="annMessage" rows="3" placeholder="Tulis isi pengumuman di sini..." style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;color:white;font-size:14px;outline:none;resize:none;box-sizing:border-box;"></textarea>
+        </div>
+        <div style="margin-bottom:20px;">
+            <label style="color:rgba(255,255,255,0.6);font-size:12px;display:block;margin-bottom:6px;">TIPE</label>
+            <select id="annType" style="width:100%;background:#2a2a3e;border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;color:white;font-size:14px;outline:none;">
+                <option value="info">ℹ️ Info</option>
+                <option value="update">🚀 Update</option>
+                <option value="warning">⚠️ Peringatan</option>
+                <option value="promo">🎉 Promo</option>
+            </select>
+        </div>
+        <button id="annSendBtn" onclick="sendAnnouncement()" style="width:100%;background:linear-gradient(135deg,#a78bfa,#f472b6);border:none;color:white;padding:13px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">Kirim ke Semua Pengguna</button>
+        <button onclick="clearAnnouncement()" style="width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);padding:11px;border-radius:12px;font-size:14px;cursor:pointer;">Hapus Pengumuman Aktif</button>
     </div>
 </div>
 
