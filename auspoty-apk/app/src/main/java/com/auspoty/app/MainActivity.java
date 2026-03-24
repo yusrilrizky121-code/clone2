@@ -2,23 +2,34 @@ package com.auspoty.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.view.KeyEvent;
 import android.view.View;
+import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+import java.io.File;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -29,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
     private Runnable keepAliveRunnable;
     private PowerManager.WakeLock webViewWakeLock;
     private static final int REQ_LOGIN = 102;
+    private long activeDownloadId = -1;
+    private BroadcastReceiver downloadReceiver;
 
     private static final String APP_URL = "file:///android_asset/index.html";
     private static final String API_HOST = "clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app";
@@ -108,6 +121,71 @@ public class MainActivity extends AppCompatActivity {
                     webViewWakeLock.release();
                 }
             }
+
+            // Download MP3 via DownloadManager Android
+            @android.webkit.JavascriptInterface
+            public void downloadFile(String url, String filename) {
+                try {
+                    String safeFilename = filename.replaceAll("[/:*?\"<>|]", "_");
+                    if (!safeFilename.endsWith(".mp3")) safeFilename += ".mp3";
+                    DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+                    req.setTitle(safeFilename.replace(".mp3", ""));
+                    req.setDescription("Mengunduh lagu...");
+                    req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    req.setDestinationInExternalPublicDir(Environment.DIRECTORY_MUSIC, "Auspoty/" + safeFilename);
+                    req.allowScanningByMediaScanner();
+                    activeDownloadId = dm.enqueue(req);
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Download dimulai: " + safeFilename, Toast.LENGTH_SHORT).show());
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "Gagal download: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }
+
+            // Cek apakah lagu sudah ada di lokal (offline)
+            @android.webkit.JavascriptInterface
+            public boolean isOfflineAvailable(String videoId) {
+                File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Auspoty");
+                if (!dir.exists()) return false;
+                File[] files = dir.listFiles();
+                if (files == null) return false;
+                for (File f : files) {
+                    if (f.getName().contains(videoId)) return true;
+                }
+                return false;
+            }
+
+            // Ambil path file offline untuk diputar
+            @android.webkit.JavascriptInterface
+            public String getOfflineFilePath(String videoId) {
+                File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Auspoty");
+                if (!dir.exists()) return "";
+                File[] files = dir.listFiles();
+                if (files == null) return "";
+                for (File f : files) {
+                    if (f.getName().contains(videoId)) return "file://" + f.getAbsolutePath();
+                }
+                return "";
+            }
+
+            // Ambil semua lagu offline sebagai JSON
+            @android.webkit.JavascriptInterface
+            public String getOfflineSongs() {
+                File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "Auspoty");
+                if (!dir.exists()) return "[]";
+                File[] files = dir.listFiles();
+                if (files == null || files.length == 0) return "[]";
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < files.length; i++) {
+                    String name = files[i].getName().replace(".mp3", "");
+                    sb.append("{\"filename\":\"").append(name.replace("\"", "\\\""))
+                      .append("\",\"path\":\"file://").append(files[i].getAbsolutePath().replace("\"", "\\\""))
+                      .append("\"}");
+                    if (i < files.length - 1) sb.append(",");
+                }
+                sb.append("]");
+                return sb.toString();
+            }
         }, "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
@@ -159,6 +237,62 @@ public class MainActivity extends AppCompatActivity {
 
         webView.loadUrl(APP_URL);
 
+        // Request storage permission untuk download
+        requestStoragePermission();
+
+        // DownloadListener — tangkap semua download dari WebView
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            try {
+                String filename = "auspoty_music.mp3";
+                if (contentDisposition != null && contentDisposition.contains("filename=")) {
+                    filename = contentDisposition.substring(contentDisposition.indexOf("filename=") + 9).replace("\"", "").trim();
+                }
+                DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+                req.setTitle(filename.replace(".mp3", ""));
+                req.setDescription("Mengunduh lagu...");
+                req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                req.setDestinationInExternalPublicDir(Environment.DIRECTORY_MUSIC, "Auspoty/" + filename);
+                req.allowScanningByMediaScanner();
+                req.addRequestHeader("User-Agent", userAgent);
+                activeDownloadId = dm.enqueue(req);
+                Toast.makeText(this, "Download dimulai: " + filename, Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Gagal download: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+
+        // BroadcastReceiver — notifikasi JS saat download selesai
+        downloadReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                if (id == activeDownloadId) {
+                    DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    DownloadManager.Query q = new DownloadManager.Query();
+                    q.setFilterById(id);
+                    Cursor c = dm.query(q);
+                    if (c != null && c.moveToFirst()) {
+                        int statusIdx = c.getColumnIndex(DownloadManager.COLUMN_STATUS);
+                        int status = statusIdx >= 0 ? c.getInt(statusIdx) : -1;
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            runOnUiThread(() -> webView.evaluateJavascript(
+                                "if(typeof showToast==='function') showToast('Download selesai! Lagu tersimpan di Music/Auspoty');", null));
+                        } else {
+                            runOnUiThread(() -> webView.evaluateJavascript(
+                                "if(typeof showToast==='function') showToast('Download gagal, coba lagi');", null));
+                        }
+                        c.close();
+                    }
+                }
+            }
+        };
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(downloadReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(downloadReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+        }
+
         // Cegah WebView di-throttle saat background
         webView.setKeepScreenOn(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -209,6 +343,26 @@ public class MainActivity extends AppCompatActivity {
                 keepAliveHandler.postDelayed(this, 1000);
             }
         };
+    }
+
+    private void requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ pakai READ_MEDIA_AUDIO
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_AUDIO)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                    new String[]{ android.Manifest.permission.READ_MEDIA_AUDIO }, 200);
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                    new String[]{
+                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        android.Manifest.permission.READ_EXTERNAL_STORAGE
+                    }, 200);
+            }
+        }
     }
 
     private long lastBackPressTime = 0;
@@ -293,6 +447,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         if (keepAliveHandler != null) keepAliveHandler.removeCallbacks(keepAliveRunnable);
         if (webViewWakeLock != null && webViewWakeLock.isHeld()) webViewWakeLock.release();
+        if (downloadReceiver != null) { try { unregisterReceiver(downloadReceiver); } catch (Exception ignored) {} }
         stopService(new Intent(this, MusicService.class));
         webView.destroy();
     }

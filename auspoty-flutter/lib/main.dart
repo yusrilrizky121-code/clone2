@@ -11,10 +11,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:open_filex/open_filex.dart';
 
 const _ch = MethodChannel('com.auspoty.app/music');
 final _keepAlive = InAppWebViewKeepAlive();
 const _base = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
+
+// Versi app saat ini — harus sama dengan versionName di build.gradle
+const _appVersion = '8.1.0';
+const _githubReleasesApi = 'https://api.github.com/repos/yusrilrizky121-code/Auspoty/releases/latest';
 
 // Local file server for WebView audio
 HttpServer? _fileServer;
@@ -109,6 +114,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   bool _loading = true;
   bool _isOffline = false;
   bool _announcementChecked = false;
+  bool _updateChecked = false;
   DateTime? _lastBack;
   Timer? _progressTimer;
 
@@ -180,6 +186,167 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   }
 
   void _startProgressTimer() {}
+
+  // Cek update dari GitHub Releases
+  Future<void> _checkForUpdate() async {
+    if (_updateChecked) return;
+    _updateChecked = true;
+    try {
+      final res = await http.get(
+        Uri.parse(_githubReleasesApi),
+        headers: {'User-Agent': 'AuspotyApp/$_appVersion', 'Accept': 'application/vnd.github.v3+json'},
+      ).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return;
+      final data = json.decode(res.body) as Map<String, dynamic>;
+      final latestTag = (data['tag_name'] as String? ?? '').replaceAll('v', '').trim();
+      if (latestTag.isEmpty || latestTag == _appVersion) return;
+
+      // Bandingkan versi
+      if (!_isNewerVersion(latestTag, _appVersion)) return;
+
+      // Cari APK asset arm64
+      final assets = (data['assets'] as List? ?? []);
+      String? apkUrl;
+      for (final a in assets) {
+        final name = (a['name'] as String? ?? '').toLowerCase();
+        if (name.endsWith('.apk') && (name.contains('arm64') || name.contains('release'))) {
+          apkUrl = a['browser_download_url'] as String?;
+          break;
+        }
+      }
+      // Fallback: ambil APK pertama
+      if (apkUrl == null) {
+        for (final a in assets) {
+          if ((a['name'] as String? ?? '').toLowerCase().endsWith('.apk')) {
+            apkUrl = a['browser_download_url'] as String?;
+            break;
+          }
+        }
+      }
+      if (apkUrl == null) return;
+
+      final releaseNotes = (data['body'] as String? ?? '').trim();
+      if (!mounted) return;
+
+      // Tampilkan dialog update
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _UpdateDialog(
+          currentVersion: _appVersion,
+          newVersion: latestTag,
+          releaseNotes: releaseNotes,
+          apkUrl: apkUrl!,
+          onDownload: () => _downloadAndInstallApk(apkUrl!, latestTag),
+        ),
+      );
+    } catch (e) {
+      debugPrint('checkForUpdate error: $e');
+    }
+  }
+
+  bool _isNewerVersion(String latest, String current) {
+    try {
+      final l = latest.split('.').map(int.parse).toList();
+      final c = current.split('.').map(int.parse).toList();
+      while (l.length < 3) l.add(0);
+      while (c.length < 3) c.add(0);
+      for (int i = 0; i < 3; i++) {
+        if (l[i] > c[i]) return true;
+        if (l[i] < c[i]) return false;
+      }
+      return false;
+    } catch (_) { return false; }
+  }
+
+  Future<void> _downloadAndInstallApk(String url, String version) async {
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // tutup dialog
+
+    // Tampilkan progress dialog
+    double progress = 0;
+    final progressNotifier = ValueNotifier<double>(0);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ValueListenableBuilder<double>(
+        valueListenable: progressNotifier,
+        builder: (ctx, val, _) => AlertDialog(
+          backgroundColor: const Color(0xFF1a1a2e),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Mengunduh Update', style: TextStyle(color: Colors.white, fontSize: 16)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            LinearProgressIndicator(
+              value: val > 0 ? val : null,
+              backgroundColor: Colors.white12,
+              color: const Color(0xFFa78bfa),
+            ),
+            const SizedBox(height: 12),
+            Text(val > 0 ? '${(val * 100).toStringAsFixed(0)}%' : 'Menghubungkan...',
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          ]),
+        ),
+      ),
+    );
+
+    try {
+      final dir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+      final apkPath = '${dir.path}/auspoty-v$version.apk';
+      final file = File(apkPath);
+
+      // Download dengan progress
+      final client = http.Client();
+      final req = http.Request('GET', Uri.parse(url));
+      req.headers['User-Agent'] = 'AuspotyApp/$_appVersion';
+      final streamRes = await client.send(req).timeout(const Duration(minutes: 5));
+      final total = streamRes.contentLength ?? 0;
+      int received = 0;
+      final sink = file.openWrite();
+      await for (final chunk in streamRes.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (total > 0) {
+          progress = received / total;
+          progressNotifier.value = progress;
+        }
+      }
+      await sink.close();
+      client.close();
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // tutup progress
+
+      // Install APK via intent
+      await _installApk(apkPath);
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Gagal download: ${e.toString().substring(0, e.toString().length.clamp(0, 60))}'),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
+
+  Future<void> _installApk(String path) async {
+    try {
+      final result = await OpenFilex.open(path, type: 'application/vnd.android.package-archive');
+      if (result.type != ResultType.done) {
+        // Fallback ke browser jika open_filex gagal
+        await launchUrl(
+          Uri.parse('https://github.com/yusrilrizky121-code/Auspoty/releases/latest'),
+          mode: LaunchMode.externalApplication,
+        );
+      }
+    } catch (_) {
+      await launchUrl(
+        Uri.parse('https://github.com/yusrilrizky121-code/Auspoty/releases/latest'),
+        mode: LaunchMode.externalApplication,
+      );
+    }
+  }
 
   // Cek pengumuman dari server saat app load
   Future<void> _checkAnnouncement() async {
@@ -762,6 +929,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 if (!_announcementChecked && (urlStr.contains('vercel.app') || urlStr.contains('clone2'))) {
                   _announcementChecked = true;
                   _checkAnnouncement();
+                  _checkForUpdate();
                 }
                 if (urlStr.contains('userData=')) {
                   final uri = Uri.parse(urlStr);
@@ -1151,5 +1319,92 @@ class _OfflinePlayerSheetState extends State<_OfflinePlayerSheet> {
     width: size, height: size,
     decoration: BoxDecoration(color: const Color(0xFF2d2d4e), borderRadius: BorderRadius.circular(6)),
     child: const Icon(Icons.music_note, color: Color(0xFFa78bfa), size: 26),
+  );
+}
+
+// ─── Update Dialog ────────────────────────────────────────────────────────────
+class _UpdateDialog extends StatelessWidget {
+  final String currentVersion;
+  final String newVersion;
+  final String releaseNotes;
+  final String apkUrl;
+  final VoidCallback onDownload;
+
+  const _UpdateDialog({
+    required this.currentVersion,
+    required this.newVersion,
+    required this.releaseNotes,
+    required this.apkUrl,
+    required this.onDownload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1a1a2e),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFa78bfa).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.system_update, color: Color(0xFFa78bfa), size: 24),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Text('Update Tersedia', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+        ),
+      ]),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          _versionChip(currentVersion, Colors.white24, Colors.white54),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Icon(Icons.arrow_forward, color: Color(0xFFa78bfa), size: 18),
+          ),
+          _versionChip(newVersion, const Color(0xFFa78bfa).withOpacity(0.2), const Color(0xFFa78bfa)),
+        ]),
+        if (releaseNotes.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('Yang baru:', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 120),
+            child: SingleChildScrollView(
+              child: Text(
+                releaseNotes.length > 300 ? '${releaseNotes.substring(0, 300)}...' : releaseNotes,
+                style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+      ]),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+          child: const Text('Nanti', style: TextStyle(color: Colors.white38)),
+        ),
+        ElevatedButton.icon(
+          onPressed: onDownload,
+          icon: const Icon(Icons.download, size: 18),
+          label: const Text('Update Sekarang', style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFa78bfa),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _versionChip(String version, Color bg, Color fg) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+    child: Text('v$version', style: TextStyle(color: fg, fontSize: 13, fontWeight: FontWeight.bold)),
   );
 }

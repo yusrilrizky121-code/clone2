@@ -185,8 +185,9 @@
             <svg viewBox="0 0 24 24" onclick="openCreatePlaylist()"><path d="M11 11V4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg>
         </div>
     </div>
-    <div class="lib-filters"><div class="pill active">Playlist</div></div>
+    <div class="lib-filters"><div class="pill active" id="libTabPlaylist" onclick="switchLibTab('playlist')">Playlist</div><div class="pill" id="libTabOffline" onclick="switchLibTab('offline')">Unduhan</div></div>
     <div class="lib-list" id="libraryContainer"></div>
+    <div class="lib-list" id="offlineContainer" style="display:none;"></div>
 </div>
 
 <!-- ARTIST -->

@@ -31,9 +31,11 @@ import java.net.URL
 class MusicPlayerService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "auspoty_music"
-        const val NOTIF_ID   = 77
-        const val TAG        = "MusicPlayerService"
+        const val CHANNEL_ID      = "auspoty_music"
+        const val CHANNEL_ANNOUNCE = "auspoty_announce"
+        const val NOTIF_ID        = 77
+        const val NOTIF_ANNOUNCE  = 78
+        const val TAG             = "MusicPlayerService"
 
         const val ACTION_PLAY_PAUSE = "com.auspoty.app.PLAY_PAUSE"
         const val ACTION_NEXT       = "com.auspoty.app.NEXT"
@@ -471,8 +473,43 @@ class MusicPlayerService : Service() {
                 setSound(null, null); enableVibration(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
+            val chAnnounce = NotificationChannel(CHANNEL_ANNOUNCE, "Pengumuman Auspoty", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Notifikasi pengumuman, update, dan info dari Auspoty"
+                enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
             notifManager?.createNotificationChannel(ch)
+            notifManager?.createNotificationChannel(chAnnounce)
         }
+    }
+
+    fun sendAnnouncement(title: String, message: String, type: String = "info") {
+        val openPi = PendingIntent.getActivity(
+            this, 99,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val icon = when (type) {
+            "update"  -> android.R.drawable.stat_sys_download_done
+            "warning" -> android.R.drawable.ic_dialog_alert
+            "promo"   -> android.R.drawable.ic_menu_info_details
+            else      -> android.R.drawable.ic_dialog_info
+        }
+        val notif = NotificationCompat.Builder(this, CHANNEL_ANNOUNCE)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setSmallIcon(icon)
+            .setLargeIcon(currentArt)
+            .setContentIntent(openPi)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+        notifManager?.notify(NOTIF_ANNOUNCE, notif)
+        Log.d(TAG, "Announcement sent: $title")
     }
 
     private fun setupWakeLock() {

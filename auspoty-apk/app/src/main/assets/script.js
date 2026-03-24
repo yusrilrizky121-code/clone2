@@ -74,7 +74,14 @@ function getHighResImage(url) {
     return url.replace(/=w\d+-h\d+/, '=w500-h500').replace(/w\d+_h\d+/, 'w500_h500');
 }
 function playMusic(videoId, encodedData) {
+    // Hentikan & bersihkan offline audio jika sedang aktif
+    if (offlineAudio) {
+        offlineAudio.pause();
+        offlineAudio.src = '';
+        offlineAudio = null;
+    }
     currentTrack = JSON.parse(decodeURIComponent(encodedData));
+    isPlaying = false;
     checkIfLiked(currentTrack.videoId); updateMediaSession();
     document.getElementById('miniPlayer').style.display = 'flex';
     document.getElementById('miniPlayerImg').src = currentTrack.img;
@@ -395,6 +402,53 @@ function toggleLike() {
     };
 }
 
+// LIBRARY TAB SWITCH
+function switchLibTab(tab) {
+    const tabPlaylist = document.getElementById('libTabPlaylist');
+    const tabOffline = document.getElementById('libTabOffline');
+    const libContainer = document.getElementById('libraryContainer');
+    const offContainer = document.getElementById('offlineContainer');
+    if (tab === 'offline') {
+        if (tabPlaylist) tabPlaylist.classList.remove('active');
+        if (tabOffline) tabOffline.classList.add('active');
+        if (libContainer) libContainer.style.display = 'none';
+        if (offContainer) offContainer.style.display = 'block';
+        loadOfflineSongs();
+    } else {
+        if (tabOffline) tabOffline.classList.remove('active');
+        if (tabPlaylist) tabPlaylist.classList.add('active');
+        if (offContainer) offContainer.style.display = 'none';
+        if (libContainer) libContainer.style.display = 'block';
+    }
+}
+
+function loadOfflineSongs() {
+    const container = document.getElementById('offlineContainer');
+    if (!container) return;
+    if (!window.AndroidBridge || typeof window.AndroidBridge.getOfflineSongs !== 'function') {
+        container.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Fitur offline hanya tersedia di aplikasi Android.</div>';
+        return;
+    }
+    try {
+        const songs = JSON.parse(window.AndroidBridge.getOfflineSongs() || '[]');
+        if (songs.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Belum ada lagu yang diunduh.<br><small>Tekan ikon unduh saat memutar lagu.</small></div>';
+            return;
+        }
+        container.innerHTML = songs.map(s => {
+            const parts = s.filename.split('_');
+            const title = parts.slice(1).join(' ') || s.filename;
+            return '<div class="v-item" onclick="playOfflineFile(\'' + s.path.replace(/'/g, "\\'") + '\',\'' + title.replace(/'/g, "\\'") + '\',\'Offline\',\'\')">'+
+                '<div class="v-img" style="background:#333;display:flex;align-items:center;justify-content:center;border-radius:4px;width:48px;height:48px;flex-shrink:0;">'+
+                '<svg viewBox="0 0 24 24" style="fill:white;width:24px;height:24px;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>'+
+                '<div class="v-info"><div class="v-title">' + title + '</div><div class="v-sub">Tersimpan offline</div></div>'+
+                '</div>';
+        }).join('');
+    } catch(e) {
+        container.innerHTML = '<div style="color:#ff5252;padding:16px;text-align:center;">Gagal memuat lagu offline.</div>';
+    }
+}
+
 // LIBRARY
 function renderLibraryUI() {
     const container = document.getElementById('libraryContainer');
@@ -661,14 +715,20 @@ async function downloadMusic() {
         });
         const result = await res.json();
         if (result.status === 'success' && result.url) {
-            const a = document.createElement('a');
-            a.href = result.url;
-            a.download = (result.title || currentTrack.title).replace(/[\/:*?"<>|]/g, '_') + '.mp3';
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => document.body.removeChild(a), 1000);
-            showToast('Download MP3 dimulai!');
+            const filename = (currentTrack.videoId + '_' + (result.title || currentTrack.title)).replace(/[\/:*?"<>|]/g, '_') + '.mp3';
+            // Gunakan AndroidBridge jika di APK, fallback ke link biasa di browser
+            if (window.AndroidBridge && typeof window.AndroidBridge.downloadFile === 'function') {
+                window.AndroidBridge.downloadFile(result.url, filename);
+            } else {
+                const a = document.createElement('a');
+                a.href = result.url;
+                a.download = filename;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => document.body.removeChild(a), 1000);
+                showToast('Download MP3 dimulai!');
+            }
         } else {
             showToast('Gagal: ' + (result.message || 'Coba lagi'));
         }
@@ -677,6 +737,63 @@ async function downloadMusic() {
     } finally {
         [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '1'; b.style.pointerEvents = ''; } });
     }
+}
+
+// OFFLINE AUDIO PLAYER — pakai <audio> tag untuk file lokal
+let offlineAudio = null;
+function playOfflineFile(filePath, title, artist, img) {
+    // Hentikan YouTube player jika sedang jalan
+    if (ytPlayer && typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+    // Cleanup offlineAudio lama
+    if (offlineAudio) {
+        offlineAudio.pause();
+        offlineAudio.src = '';
+        offlineAudio = null;
+    }
+
+    offlineAudio = new Audio(filePath);
+    offlineAudio.play().catch(e => showToast('Gagal putar offline: ' + e.message));
+
+    // Update UI player
+    currentTrack = { videoId: 'offline_' + Date.now(), title, artist, img: img || 'https://via.placeholder.com/300x300?text=music' };
+    isPlaying = true;
+    document.getElementById('miniPlayer').style.display = 'flex';
+    document.getElementById('miniPlayerImg').src = currentTrack.img;
+    document.getElementById('miniPlayerTitle').innerText = title;
+    document.getElementById('miniPlayerArtist').innerText = artist;
+    document.getElementById('playerArt').src = currentTrack.img;
+    document.getElementById('playerTitle').innerText = title;
+    document.getElementById('playerArtist').innerText = artist;
+    document.getElementById('playerBg').style.backgroundImage = "url('" + currentTrack.img + "')";
+    document.getElementById('progressBar').value = 0;
+
+    offlineAudio.addEventListener('timeupdate', function() {
+        if (offlineAudio && offlineAudio.duration > 0) {
+            const pct = (offlineAudio.currentTime / offlineAudio.duration) * 100;
+            const bar = document.getElementById('progressBar');
+            if (bar) { bar.value = pct; bar.style.background = 'linear-gradient(to right, white ' + pct + '%, rgba(255,255,255,0.2) ' + pct + '%)'; }
+            document.getElementById('currentTime').innerText = formatTime(offlineAudio.currentTime);
+            document.getElementById('totalTime').innerText = formatTime(offlineAudio.duration);
+        }
+    });
+    offlineAudio.addEventListener('ended', function() { isPlaying = false; });
+
+    if (window.AndroidBridge && typeof window.AndroidBridge.onMusicPlay === 'function') {
+        window.AndroidBridge.onMusicPlay(title, artist);
+    }
+    updateMediaSession();
+    showToast('Memutar offline: ' + title);
+}
+
+// Override togglePlay agar support offline audio
+const _origTogglePlay = togglePlay;
+function togglePlay() {
+    if (offlineAudio) {
+        if (offlineAudio.paused) { offlineAudio.play(); isPlaying = true; }
+        else { offlineAudio.pause(); isPlaying = false; }
+        return;
+    }
+    _origTogglePlay();
 }
 
 // GOOGLE LOGIN

@@ -485,6 +485,11 @@ function playMusicById(videoId) {
 // Khusus untuk lagu yang sudah diunduh — langsung panggil playLocalFile
 // tanpa butuh _trackCache atau koneksi internet
 function playDownloadedSong(videoId, title, artist, img) {
+    // Stop ytPlayer dulu agar tidak bentrok
+    try { if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch(e) {}
+    window._localAudioPlaying = false;
+    isPlaying = false;
+
     currentTrack = { videoId: videoId, title: title, artist: artist, img: img };
     window.currentTrack = currentTrack;
     var _mp = document.getElementById('miniPlayer');
@@ -504,13 +509,21 @@ function playDownloadedSong(videoId, title, artist, img) {
     if (_par) _par.innerText = artist;
     if (_pbg) _pbg.style.backgroundImage = "url('" + img + "')";
     var _bar = document.getElementById('progressBar');
+    var _pf = document.getElementById('progressFill');
+    var _mf = document.getElementById('miniProgressFill');
     if (_bar) _bar.value = 0;
+    if (_pf) _pf.style.width = '0%';
+    if (_mf) _mf.style.width = '0%';
     var _ct = document.getElementById('currentTime'); if (_ct) _ct.innerText = '0:00';
     var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
+    stopProgressBar();
+    updateMediaSession();
     if (window.flutter_inappwebview) {
         try {
             window.flutter_inappwebview.callHandler('playLocalFile', title, artist, img, videoId);
         } catch(e) { showToast('Gagal memutar: ' + e); }
+    } else {
+        showToast('Fitur offline hanya tersedia di aplikasi APK');
     }
 }
 function renderVItem(t) {
@@ -827,27 +840,6 @@ function openHistoryView() {
     switchView('playlist');
 }
 function openDownloadedSongs() {
-    // Kalau Flutter tersedia, pakai native bottom sheet (bisa offline)
-    if (window.flutter_inappwebview) {
-        try {
-            window.flutter_inappwebview.callHandler('openOfflinePlayer');
-        } catch(e) {}
-        if (!db) return;
-        const tx = db.transaction('downloaded_songs', 'readonly');
-        tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => {
-            const tracks = e.target.result || [];
-            document.getElementById('playlistNameDisplay').innerText = 'Lagu Diunduh';
-            document.getElementById('playlistStatsDisplay').innerText = tracks.length + ' lagu';
-            document.getElementById('playlistImageDisplay').src = tracks.length > 0 ? (tracks[0].img || '') : 'https://via.placeholder.com/220x220?text=music';
-            window._playlistTracks = tracks;
-            window._isDownloadedView = true;
-            document.getElementById('playlistTracksContainer').innerHTML = tracks.length > 0
-                ? tracks.map(t => renderDownloadedVItem(t)).join('')
-                : '<div style="color:var(--text-sub);padding:16px;">Belum ada lagu diunduh.</div>';
-            switchView('playlist');
-        };
-        return;
-    }
     if (!db) return;
     const tx = db.transaction('downloaded_songs', 'readonly');
     tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => {
@@ -859,7 +851,7 @@ function openDownloadedSongs() {
         window._isDownloadedView = true;
         document.getElementById('playlistTracksContainer').innerHTML = tracks.length > 0
             ? tracks.map(t => renderDownloadedVItem(t)).join('')
-            : '<div style="color:var(--text-sub);padding:16px;">Belum ada lagu diunduh.</div>';
+            : '<div style="color:var(--text-sub);padding:16px;">Belum ada lagu diunduh.<br><small>Tekan ikon unduh saat memutar lagu.</small></div>';
         switchView('playlist');
     };
 }
@@ -1087,6 +1079,8 @@ function updateProfileUI() {
     const loginBtn = document.getElementById('googleLoginBtn'); if (loginBtn) loginBtn.style.display = user ? 'none' : 'block';
     const logoutBtn = document.getElementById('googleLogoutBtn'); if (logoutBtn) logoutBtn.style.display = user ? 'block' : 'none';
     const logoutSub = document.getElementById('googleLogoutSub'); if (logoutSub && user) logoutSub.innerText = user.email;
+    // Tampilkan/sembunyikan tombol admin
+    if (typeof updateAdminUI === 'function') updateAdminUI();
 }
 
 // COMMENTS
@@ -1227,3 +1221,76 @@ function _stopBgPause() {
     }
 }
 window._stopBgPause = _stopBgPause;
+
+// ============================================================
+// ADMIN ANNOUNCEMENT — hanya untuk yusrilrizky149@gmail.com
+// ============================================================
+const ADMIN_EMAIL = 'yusrilrizky149@gmail.com';
+
+function isAdmin() {
+    const user = getGoogleUser();
+    return user && user.email === ADMIN_EMAIL;
+}
+
+function openAnnouncementPanel() {
+    if (!isAdmin()) { showToast('Hanya admin yang bisa mengakses fitur ini'); return; }
+    const modal = document.getElementById('announcementModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeAnnouncementPanel() {
+    const modal = document.getElementById('announcementModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function sendAnnouncement() {
+    if (!isAdmin()) { showToast('Unauthorized'); return; }
+    const title   = document.getElementById('annTitle').value.trim();
+    const message = document.getElementById('annMessage').value.trim();
+    const type    = document.getElementById('annType').value;
+    if (!title || !message) { showToast('Judul dan pesan wajib diisi'); return; }
+    const id = Date.now().toString();
+    const btn = document.getElementById('annSendBtn');
+    if (btn) { btn.disabled = true; btn.innerText = 'Mengirim...'; }
+    try {
+        const API = (typeof API_BASE !== 'undefined') ? API_BASE : '';
+        const res = await fetch(API + '/api/announcement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminEmail: ADMIN_EMAIL, status: 'success', id, title, message, type })
+        });
+        const result = await res.json();
+        if (result.status === 'ok') {
+            showToast('Pengumuman berhasil dikirim ke semua pengguna!');
+            closeAnnouncementPanel();
+            document.getElementById('annTitle').value = '';
+            document.getElementById('annMessage').value = '';
+        } else {
+            showToast('Gagal: ' + (result.message || 'Error'));
+        }
+    } catch(e) {
+        showToast('Gagal koneksi: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = 'Kirim Pengumuman'; }
+    }
+}
+
+async function clearAnnouncement() {
+    if (!isAdmin()) return;
+    try {
+        const API = (typeof API_BASE !== 'undefined') ? API_BASE : '';
+        await fetch(API + '/api/announcement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminEmail: ADMIN_EMAIL, status: 'none', id: '', title: '', message: '', type: 'info' })
+        });
+        showToast('Pengumuman dihapus');
+    } catch(e) { showToast('Gagal: ' + e.message); }
+}
+
+// Tampilkan tombol admin di settings jika login sebagai admin
+function updateAdminUI() {
+    const btn = document.getElementById('adminAnnouncementBtn');
+    if (!btn) return;
+    btn.style.display = isAdmin() ? 'flex' : 'none';
+}
