@@ -2,7 +2,7 @@ name: auspoty
 description: Auspoty - Music Streaming App
 publish_to: 'none'
 
-version: 3.0.0+3
+version: 4.0.0+4
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -11,12 +11,13 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_inappwebview: ^6.0.0
-  permission_handler: ^11.3.0
   shared_preferences: ^2.2.3
   wakelock_plus: ^1.2.5
   path_provider: ^2.1.3
   url_launcher: ^6.2.6
   http: ^1.2.1
+  just_audio: ^0.9.40
+  workmanager: ^0.5.2
 
 dev_dependencies:
   flutter_test:

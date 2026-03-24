@@ -6,9 +6,11 @@ import android.content.ServiceConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import androidx.work.*
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.TimeUnit
 
 class MainActivity : FlutterActivity() {
 
@@ -63,6 +65,13 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "keepAlive" -> { service?.keepAlive(); result.success(null) }
+                "sendAnnouncement" -> {
+                    val title   = call.argument<String>("title")   ?: "Auspoty"
+                    val message = call.argument<String>("message") ?: ""
+                    val type    = call.argument<String>("type")    ?: "info"
+                    service?.sendAnnouncement(title, message, type)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -72,6 +81,7 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         startServiceSafe(Intent(this, MusicPlayerService::class.java))
         bindService(Intent(this, MusicPlayerService::class.java), conn, BIND_AUTO_CREATE)
+        scheduleAnnouncementWorker()
     }
 
     override fun onResume() {
@@ -102,5 +112,22 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
             else startService(intent)
         } catch (e: Exception) { android.util.Log.e("MainActivity", "startService: ${e.message}") }
+    }
+
+    private fun scheduleAnnouncementWorker() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        // Jalankan setiap 15 menit (minimum WorkManager)
+        val request = PeriodicWorkRequestBuilder<AnnouncementWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "auspoty_announcement_check",
+            ExistingPeriodicWorkPolicy.KEEP,  // jangan replace kalau sudah ada
+            request
+        )
     }
 }
