@@ -1042,7 +1042,21 @@ function saveProfile() {
     const name = document.getElementById('editProfileName').value.trim() || 'Pengguna Auspoty';
     saveSettings({ profileName: name }); applyAllSettings(); updateProfileUI(); closeEditProfile(); showToast('Profil disimpan!');
 }
-function triggerPhotoUpload() { document.getElementById('profilePhotoInput').click(); }
+function triggerPhotoUpload() {
+    // Di Android WebView, gunakan native image picker via Flutter handler
+    if (window.flutter_inappwebview) {
+        window.flutter_inappwebview.callHandler('pickProfilePhoto');
+    } else {
+        document.getElementById('profilePhotoInput').click();
+    }
+}
+function applyProfilePhoto(base64) {
+    localStorage.setItem('auspotyProfilePhoto', base64);
+    const av = document.getElementById('editProfileAvatar'); if (av) av.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+    const settAv = document.getElementById('settingsAvatar'); if (settAv) settAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+    const homeAv = document.querySelector('.app-avatar'); if (homeAv) homeAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+    showToast('Foto profil diperbarui!');
+}
 function handleProfilePhotoChange(event) {
     const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();

@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'package:image_picker/image_picker.dart';
 
 const _ch = MethodChannel('com.auspoty.app/music');
 final _keepAlive = InAppWebViewKeepAlive();
@@ -202,7 +203,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         final shown = prefs.getString('lastAnnouncementId') ?? '';
         if (shown == annKey) return;
         await prefs.setString('lastAnnouncementId', annKey);
-        // Kirim notifikasi via native service
+        // Kirim notifikasi via native service (hanya status bar, tanpa toast)
         try {
           await _ch.invokeMethod('sendAnnouncement', {
             'title': title.isNotEmpty ? title : 'Auspoty',
@@ -210,12 +211,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             'type': type,
           });
         } catch (_) {}
-        // Tampilkan juga di WebView sebagai toast
-        if (_wvc != null) {
-          final safeMsg = (message.isNotEmpty ? message : title).replaceAll("'", "\\'");
-          await _wvc!.evaluateJavascript(source:
-            "if(typeof showToast==='function') showToast('$safeMsg');");
-        }
       }
     } catch (_) {}
   }
@@ -735,6 +730,27 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                   handlerName: 'openGoogleLogin',
                   callback: (args) async {
                     await c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/login.html')));
+                  },
+                );
+                c.addJavaScriptHandler(
+                  handlerName: 'pickProfilePhoto',
+                  callback: (args) async {
+                    try {
+                      final picker = ImagePicker();
+                      final picked = await picker.pickImage(
+                        source: ImageSource.gallery,
+                        maxWidth: 512,
+                        maxHeight: 512,
+                        imageQuality: 80,
+                      );
+                      if (picked == null) return;
+                      final bytes = await picked.readAsBytes();
+                      final base64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+                      await c.evaluateJavascript(source:
+                        "if(typeof applyProfilePhoto==='function') applyProfilePhoto('$base64');");
+                    } catch (e) {
+                      debugPrint('pickProfilePhoto error: $e');
+                    }
                   },
                 );
               },

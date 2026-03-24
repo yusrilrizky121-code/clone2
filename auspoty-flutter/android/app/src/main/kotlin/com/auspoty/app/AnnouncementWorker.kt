@@ -55,8 +55,8 @@ class AnnouncementWorker(
             // Simpan id agar tidak muncul lagi
             prefs.edit().putString(KEY_LAST_ID, annKey).apply()
 
-            // Tampilkan notifikasi
-            showNotification(title.ifEmpty { "Auspoty" }, message.ifEmpty { title }, type)
+            // Tampilkan notifikasi — judul selalu "Admin", isi = pesan dari email
+            showNotification("Admin", message.ifEmpty { title }, type)
             Log.d(TAG, "Announcement shown: $title")
         } catch (e: Exception) {
             Log.e(TAG, "Error: ${e.message}")
