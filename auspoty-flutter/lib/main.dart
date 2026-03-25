@@ -324,15 +324,17 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   }
 
   // ── Playback file lokal via just_audio (native) ─────────────────────────────
-  void _stopLocalPlayer() {
+  void _stopLocalPlayer({bool injectJs = true}) {
     _localPlaying = false;
     _localProgressTimer?.cancel();
     _localProgressTimer = null;
     _localPlayerSub?.cancel();
     _localPlayerSub = null;
     try { _localPlayer.stop(); } catch (_) {}
-    _wvc?.evaluateJavascript(source:
-      "(function(){window._localAudioPlaying=false;isPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
+    if (injectJs) {
+      _wvc?.evaluateJavascript(source:
+        "(function(){window._localAudioPlaying=false;isPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
+    }
   }
 
   Future<void> _playLocalFileDart(
@@ -385,12 +387,10 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       return;
     }
 
-    _stopLocalPlayer();
+    _stopLocalPlayer(injectJs: false);
 
     try {
       await _localPlayer.setFilePath(found.path);
-    } catch (e) {
-      debugPrint('setFilePath error: $e');
       await c.evaluateJavascript(source:
         "if(typeof showToast==='function') showToast('Format audio tidak didukung');");
       return;
@@ -1028,6 +1028,16 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                   handlerName: 'openGoogleLogin',
                   callback: (args) async {
                     await c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/login.html')));
+                  },
+                );
+                c.addJavaScriptHandler(
+                  handlerName: 'openExternalLogin',
+                  callback: (args) async {
+                    // Buka login.html di browser eksternal (Chrome) supaya OAuth redirect bisa jalan
+                    final loginUrl = Uri.parse('$_base/login.html');
+                    try {
+                      await launchUrl(loginUrl, mode: LaunchMode.externalApplication);
+                    } catch (_) {}
                   },
                 );
                 c.addJavaScriptHandler(

@@ -129,10 +129,17 @@
         const blocked = ['auth/popup-blocked', 'auth/popup-closed-by-user',
                          'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment'];
         if (blocked.includes(e.code)) {
-          // Popup diblokir (WebView) — pakai redirect
-          statusEl.textContent = 'Mengalihkan ke Google...';
+          // Popup diblokir di WebView — gunakan Custom Tab via flutter_inappwebview
+          statusEl.textContent = 'Membuka browser Google...';
           try {
-            await signInWithRedirect(auth, provider);
+            // Buka Google login di browser eksternal, bukan redirect di WebView
+            if (window.flutter_inappwebview) {
+              // Kirim sinyal ke Dart untuk buka Chrome Custom Tab
+              window.flutter_inappwebview.callHandler('openExternalLogin');
+            } else {
+              // Fallback: coba redirect biasa
+              await signInWithRedirect(auth, provider);
+            }
           } catch(e2) {
             spinner.style.display = 'none';
             btn.style.display = 'flex';
