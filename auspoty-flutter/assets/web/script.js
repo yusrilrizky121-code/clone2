@@ -312,12 +312,16 @@ function toggleRepeat() {
     showToast(isRepeat ? 'Ulangi aktif' : 'Ulangi nonaktif');
 }
 function playPrevSong() {
+    if (window._isDownloadedView) { playPrevDownloadedSong(); return; }
     if (songHistory.length < 2) { showToast('Tidak ada lagu sebelumnya'); return; }
     songHistory.pop();
     const prev = songHistory[songHistory.length - 1];
     if (prev) playMusic(prev.videoId, makeTrackData(prev));
 }
-function playNextSong() { playNextSimilarSong(); }
+function playNextSong() {
+    if (window._isDownloadedView) { playNextDownloadedSong(); return; }
+    playNextSimilarSong();
+}
 
 // LYRICS
 let lyricsLines = [], lyricsScrollInterval = null, currentHighlightIdx = -1, lyricsType = 'plain';
@@ -487,11 +491,15 @@ function playDownloadedSong(videoId, title, artist, img) {
     if (window.flutter_inappwebview) {
         try { window.flutter_inappwebview.callHandler('stopLocalPlayer'); } catch(e) {}
     }
-    window._localAudioPlaying = false;
-    isPlaying = false;
 
     currentTrack = { videoId: videoId, title: title, artist: artist, img: img };
     window.currentTrack = currentTrack;
+
+    // Set index di _playlistTracks supaya next/prev bisa jalan
+    if (window._playlistTracks && window._isDownloadedView) {
+        window._downloadedQueueIndex = window._playlistTracks.findIndex(function(t) { return t.videoId === videoId; });
+    }
+
     var _mp = document.getElementById('miniPlayer');
     var _mpi = document.getElementById('miniPlayerImg');
     var _mpt = document.getElementById('miniPlayerTitle');
@@ -517,7 +525,19 @@ function playDownloadedSong(videoId, title, artist, img) {
     var _ct = document.getElementById('currentTime'); if (_ct) _ct.innerText = '0:00';
     var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
     stopProgressBar();
+
+    // Set flag dulu sebelum call Dart supaya togglePlay langsung bisa handle
+    window._localAudioPlaying = true;
+    isPlaying = true;
+    updatePlayPauseBtn(true);
+
     updateMediaSession();
+    // Override media session next/prev untuk downloaded queue
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('nexttrack', playNextDownloadedSong);
+        navigator.mediaSession.setActionHandler('previoustrack', playPrevDownloadedSong);
+    }
+
     if (window.flutter_inappwebview) {
         try {
             window.flutter_inappwebview.callHandler('playLocalFile', title, artist, img, videoId);
@@ -525,6 +545,26 @@ function playDownloadedSong(videoId, title, artist, img) {
     } else {
         showToast('Fitur offline hanya tersedia di aplikasi APK');
     }
+}
+
+function playNextDownloadedSong() {
+    if (!window._isDownloadedView || !window._playlistTracks) { playNextSimilarSong(); return; }
+    var tracks = window._playlistTracks;
+    var idx = (window._downloadedQueueIndex !== undefined) ? window._downloadedQueueIndex : -1;
+    idx = (idx + 1) % tracks.length;
+    window._downloadedQueueIndex = idx;
+    var t = tracks[idx];
+    if (t) playDownloadedSong(t.videoId, t.title || '', t.artist || '', getHighResImage(t.thumbnail || t.img || ''));
+}
+
+function playPrevDownloadedSong() {
+    if (!window._isDownloadedView || !window._playlistTracks) { return; }
+    var tracks = window._playlistTracks;
+    var idx = (window._downloadedQueueIndex !== undefined) ? window._downloadedQueueIndex : 0;
+    idx = (idx - 1 + tracks.length) % tracks.length;
+    window._downloadedQueueIndex = idx;
+    var t = tracks[idx];
+    if (t) playDownloadedSong(t.videoId, t.title || '', t.artist || '', getHighResImage(t.thumbnail || t.img || ''));
 }
 function renderVItem(t) {
     _cacheTrack(t);

@@ -472,7 +472,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
               if(typeof isRepeat!=='undefined'&&isRepeat){
                 window.flutter_inappwebview.callHandler('playLocalFile','$safeTitle','$safeArtist','$safeImg','$safeVid');
               } else {
-                if(typeof playNextSimilarSong==='function') playNextSimilarSong();
+                if(window._isDownloadedView && typeof playNextDownloadedSong==='function') playNextDownloadedSong();
+                else if(typeof playNextSimilarSong==='function') playNextSimilarSong();
               }
             })();
           """);
