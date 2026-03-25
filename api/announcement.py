@@ -1,156 +1,73 @@
 from http.server import BaseHTTPRequestHandler
-import json, imaplib, email, os
-from email.header import decode_header
+import json, urllib.request, urllib.error
 
-# ── Kredensial Gmail inbox yang dipantau ─────────────────────────────────────
-IMAP_USER     = "yusrilrizky121@gmail.com"
-IMAP_PASS     = "mhyjenewwghdkbow"   # App Password (tanpa spasi)
-IMAP_HOST     = "imap.gmail.com"
-ADMIN_EMAIL   = "yusrilrizky149@gmail.com"   # satu-satunya yang boleh kirim
-# ─────────────────────────────────────────────────────────────────────────────
+# Firestore REST API — baca document "announcements/current"
+FIRESTORE_PROJECT = "auspoty-web"
+FIRESTORE_API_KEY = "AIzaSyAYJEVXTS17vEX4J6_ymevMiJUnWV-Xf8Q"
+ADMIN_EMAIL       = "yusrilrizky149@gmail.com"
 
-# In-memory store untuk announcement yang dikirim via POST (admin panel)
-# Di Vercel serverless, ini akan reset tiap cold start — tapi cukup untuk notifikasi
-_manual_announcement = {}
+FIRESTORE_URL = (
+    f"https://firestore.googleapis.com/v1/projects/{FIRESTORE_PROJECT}"
+    f"/databases/(default)/documents/announcements/current"
+    f"?key={FIRESTORE_API_KEY}"
+)
 
-def _decode_str(s):
-    if s is None:
-        return ""
-    parts = decode_header(s)
-    result = []
-    for part, enc in parts:
-        if isinstance(part, bytes):
-            result.append(part.decode(enc or "utf-8", errors="replace"))
-        else:
-            result.append(part)
-    return "".join(result)
 
-def _get_body(msg):
-    if msg.is_multipart():
-        for part in msg.walk():
-            ct = part.get_content_type()
-            cd = str(part.get("Content-Disposition", ""))
-            if ct == "text/plain" and "attachment" not in cd:
-                charset = part.get_content_charset() or "utf-8"
-                return part.get_payload(decode=True).decode(charset, errors="replace").strip()
-    else:
-        charset = msg.get_content_charset() or "utf-8"
-        return msg.get_payload(decode=True).decode(charset, errors="replace").strip()
-    return ""
+def _parse_firestore_value(val: dict):
+    """Ambil nilai dari Firestore value object."""
+    if "stringValue" in val:
+        return val["stringValue"]
+    if "integerValue" in val:
+        return int(val["integerValue"])
+    if "booleanValue" in val:
+        return val["booleanValue"]
+    if "nullValue" in val:
+        return None
+    return str(val)
 
-def fetch_latest_announcement():
-    """Coba ambil dari manual store dulu, fallback ke IMAP."""
-    global _manual_announcement
-    if _manual_announcement.get("status") == "success":
-        return _manual_announcement
-    if _manual_announcement.get("status") == "none":
-        return {"status": "none"}
-    # Fallback: baca dari Gmail IMAP
+
+def fetch_from_firestore():
+    """Baca announcement dari Firestore REST API."""
     try:
-        mail = imaplib.IMAP4_SSL(IMAP_HOST, 993)
-        mail.login(IMAP_USER, IMAP_PASS)
-        mail.select("INBOX")
-        status, data = mail.search(None, f'FROM "{ADMIN_EMAIL}"')
-        if status != "OK" or not data[0]:
-            mail.logout()
-            return None
-        ids = data[0].split()
-        latest_id = ids[-1]
-        status, msg_data = mail.fetch(latest_id, "(RFC822)")
-        mail.logout()
-        if status != "OK":
-            return None
-        raw = msg_data[0][1]
-        msg = email.message_from_bytes(raw)
-        subject = _decode_str(msg.get("Subject", "Auspoty"))
-        body    = _get_body(msg)
-        msg_id  = msg.get("Message-ID", latest_id.decode())
-        lower = (subject + body).lower()
-        if any(w in lower for w in ["update", "versi", "version", "rilis"]):
-            ann_type = "update"
-        elif any(w in lower for w in ["peringatan", "warning", "penting", "urgent"]):
-            ann_type = "warning"
-        elif any(w in lower for w in ["promo", "diskon", "gratis", "free"]):
-            ann_type = "promo"
-        else:
-            ann_type = "info"
-        return {
-            "status":  "success",
-            "id":      str(msg_id).strip(),
-            "title":   subject[:100] if subject.strip() else (body[:60] + "...") or "Pesan dari Admin",
-            "message": body[:500] if body else subject or "Ada pesan baru dari admin.",
-            "type":    ann_type,
-        }
+        req = urllib.request.Request(FIRESTORE_URL, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+        fields = data.get("fields", {})
+        status  = _parse_firestore_value(fields.get("status",  {"stringValue": "none"}))
+        title   = _parse_firestore_value(fields.get("title",   {"stringValue": ""}))
+        message = _parse_firestore_value(fields.get("message", {"stringValue": ""}))
+        ann_id  = _parse_firestore_value(fields.get("id",      {"stringValue": ""}))
+        ann_type = _parse_firestore_value(fields.get("type",   {"stringValue": "info"}))
+        if status != "success":
+            return {"status": "none"}
+        return {"status": "success", "id": ann_id, "title": title, "message": message, "type": ann_type}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"status": "none"}
+        return {"status": "error", "message": f"HTTP {e.code}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
-def _cors_headers(handler_self, code=200, methods="GET, POST, OPTIONS"):
+def _cors_headers(handler_self, code=200):
     handler_self.send_response(code)
     handler_self.send_header("Content-Type", "application/json")
     handler_self.send_header("Access-Control-Allow-Origin", "*")
-    handler_self.send_header("Access-Control-Allow-Methods", methods)
+    handler_self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
     handler_self.send_header("Access-Control-Allow-Headers", "Content-Type")
     handler_self.end_headers()
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        result = fetch_latest_announcement()
-        if result is None:
-            result = {"status": "none"}
+        result = fetch_from_firestore()
         _cors_headers(self)
         self.wfile.write(json.dumps(result).encode())
-
-    def do_POST(self):
-        global _manual_announcement
-        try:
-            length = int(self.headers.get("Content-Length", 0))
-            body   = self.rfile.read(length)
-            data   = json.loads(body)
-        except Exception:
-            _cors_headers(self, 400)
-            self.wfile.write(json.dumps({"status": "error", "message": "Invalid JSON"}).encode())
-            return
-
-        # Validasi admin
-        if data.get("adminEmail") != ADMIN_EMAIL:
-            _cors_headers(self, 403)
-            self.wfile.write(json.dumps({"status": "error", "message": "Unauthorized"}).encode())
-            return
-
-        status  = data.get("status", "none")
-        title   = str(data.get("title", "")).strip()[:100]
-        message = str(data.get("message", "")).strip()[:500]
-        ann_id  = str(data.get("id", "")).strip()
-        ann_type = data.get("type", "info")
-
-        if status == "none":
-            # Hapus pengumuman aktif
-            _manual_announcement = {"status": "none"}
-            _cors_headers(self)
-            self.wfile.write(json.dumps({"status": "ok", "message": "Pengumuman dihapus"}).encode())
-            return
-
-        if not title or not message:
-            _cors_headers(self, 400)
-            self.wfile.write(json.dumps({"status": "error", "message": "Judul dan pesan wajib diisi"}).encode())
-            return
-
-        _manual_announcement = {
-            "status":  "success",
-            "id":      ann_id or str(hash(title + message)),
-            "title":   title,
-            "message": message,
-            "type":    ann_type,
-        }
-        _cors_headers(self)
-        self.wfile.write(json.dumps({"status": "ok", "message": "Pengumuman berhasil dikirim"}).encode())
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 

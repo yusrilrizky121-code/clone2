@@ -114,12 +114,13 @@
       });
 
       // Firestore untuk komentar
-      import { getFirestore, collection, addDoc, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp }
+      import { getFirestore, collection, addDoc, setDoc, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp }
         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
       const db_fs = getFirestore(app);
       window._firestoreDB = db_fs;
       window._fsCollection = collection;
       window._fsAddDoc = addDoc;
+      window._fsSetDoc = setDoc;
       window._fsQuery = query;
       window._fsWhere = where;
       window._fsOrderBy = orderBy;

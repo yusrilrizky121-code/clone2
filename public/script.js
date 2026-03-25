@@ -1243,33 +1243,38 @@ function closeAnnouncementPanel() {
     if (modal) modal.style.display = 'none';
 }
 
+// Tulis announcement langsung ke Firestore (persistent, tidak hilang saat serverless restart)
+async function _writeAnnouncementToFirestore(data) {
+    const db = window._firestoreDB;
+    const setDoc = window._fsSetDoc;
+    const docRef = window._fsDoc;
+    if (!db || !setDoc || !docRef) throw new Error('Firestore belum siap');
+    await setDoc(docRef(db, 'announcements', 'current'), data);
+}
+
 async function sendAnnouncement() {
     if (!isAdmin()) { showToast('Unauthorized'); return; }
     const title   = document.getElementById('annTitle').value.trim();
     const message = document.getElementById('annMessage').value.trim();
     const type    = document.getElementById('annType').value;
     if (!title || !message) { showToast('Judul dan pesan wajib diisi'); return; }
-    const id = Date.now().toString();
     const btn = document.getElementById('annSendBtn');
     if (btn) { btn.disabled = true; btn.innerText = 'Mengirim...'; }
     try {
-        const API = (typeof API_BASE !== 'undefined') ? API_BASE : '';
-        const res = await fetch(API + '/api/announcement', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminEmail: ADMIN_EMAIL, status: 'success', id, title, message, type })
+        await _writeAnnouncementToFirestore({
+            status: 'success',
+            id: Date.now().toString(),
+            title,
+            message,
+            type,
+            createdAt: window._fsTimestamp ? window._fsTimestamp() : new Date()
         });
-        const result = await res.json();
-        if (result.status === 'ok') {
-            showToast('Pengumuman berhasil dikirim ke semua pengguna!');
-            closeAnnouncementPanel();
-            document.getElementById('annTitle').value = '';
-            document.getElementById('annMessage').value = '';
-        } else {
-            showToast('Gagal: ' + (result.message || 'Error'));
-        }
+        showToast('Pengumuman berhasil dikirim ke semua pengguna!');
+        closeAnnouncementPanel();
+        document.getElementById('annTitle').value = '';
+        document.getElementById('annMessage').value = '';
     } catch(e) {
-        showToast('Gagal koneksi: ' + e.message);
+        showToast('Gagal kirim: ' + e.message);
     } finally {
         if (btn) { btn.disabled = false; btn.innerText = 'Kirim Pengumuman'; }
     }
@@ -1278,12 +1283,7 @@ async function sendAnnouncement() {
 async function clearAnnouncement() {
     if (!isAdmin()) return;
     try {
-        const API = (typeof API_BASE !== 'undefined') ? API_BASE : '';
-        await fetch(API + '/api/announcement', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminEmail: ADMIN_EMAIL, status: 'none', id: '', title: '', message: '', type: 'info' })
-        });
+        await _writeAnnouncementToFirestore({ status: 'none', id: '', title: '', message: '', type: 'info' });
         showToast('Pengumuman dihapus');
     } catch(e) { showToast('Gagal: ' + e.message); }
 }
