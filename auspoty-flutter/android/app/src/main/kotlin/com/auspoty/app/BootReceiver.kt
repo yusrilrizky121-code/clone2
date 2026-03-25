@@ -31,7 +31,7 @@ class BootReceiver : BroadcastReceiver() {
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 "auspoty_announcement_check",
-                ExistingPeriodicWorkPolicy.UPDATE,
+                ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
             Log.d("BootReceiver", "AnnouncementWorker scheduled")

@@ -1243,13 +1243,46 @@ function closeAnnouncementPanel() {
     if (modal) modal.style.display = 'none';
 }
 
-// Tulis announcement langsung ke Firestore (persistent, tidak hilang saat serverless restart)
-async function _writeAnnouncementToFirestore(data) {
-    const db = window._firestoreDB;
-    const setDoc = window._fsSetDoc;
-    const docRef = window._fsDoc;
-    if (!db || !setDoc || !docRef) throw new Error('Firestore belum siap');
-    await setDoc(docRef(db, 'announcements', 'current'), data);
+// Tulis announcement via Firestore REST API pakai ID token Firebase Auth
+// Ini bypass Firestore SDK rules issue — pakai authenticated REST call
+const _FS_PROJECT = 'auspoty-web';
+const _FS_DOC_URL = `https://firestore.googleapis.com/v1/projects/${_FS_PROJECT}/databases/(default)/documents/announcements/current`;
+
+async function _getFirebaseIdToken() {
+    const auth = window._firebaseAuth;
+    if (!auth || !auth.currentUser) throw new Error('Belum login');
+    return await auth.currentUser.getIdToken(true);
+}
+
+function _toFsValue(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === 'boolean') return { booleanValue: v };
+    if (typeof v === 'number') return { integerValue: String(v) };
+    return { stringValue: String(v) };
+}
+
+async function _writeAnnouncementREST(data) {
+    const token = await _getFirebaseIdToken();
+    const fields = {};
+    for (const [k, v] of Object.entries(data)) {
+        if (k === 'createdAt') {
+            fields[k] = { timestampValue: new Date().toISOString() };
+        } else {
+            fields[k] = _toFsValue(v);
+        }
+    }
+    const res = await fetch(_FS_DOC_URL, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ fields })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+    }
 }
 
 async function sendAnnouncement() {
@@ -1261,13 +1294,11 @@ async function sendAnnouncement() {
     const btn = document.getElementById('annSendBtn');
     if (btn) { btn.disabled = true; btn.innerText = 'Mengirim...'; }
     try {
-        await _writeAnnouncementToFirestore({
+        await _writeAnnouncementREST({
             status: 'success',
             id: Date.now().toString(),
-            title,
-            message,
-            type,
-            createdAt: window._fsTimestamp ? window._fsTimestamp() : new Date()
+            title, message, type,
+            createdAt: '__ts__'
         });
         showToast('Pengumuman berhasil dikirim ke semua pengguna!');
         closeAnnouncementPanel();
@@ -1283,9 +1314,9 @@ async function sendAnnouncement() {
 async function clearAnnouncement() {
     if (!isAdmin()) return;
     try {
-        await _writeAnnouncementToFirestore({ status: 'none', id: '', title: '', message: '', type: 'info' });
+        await _writeAnnouncementREST({ status: 'none', id: '', title: '', message: '', type: 'info' });
         showToast('Pengumuman dihapus');
-    } catch(e) { showToast('Gagal: ' + e.message); }
+    } catch(e) { showToast('Gagal hapus: ' + e.message); }
 }
 
 // Tampilkan tombol admin di settings jika login sebagai admin

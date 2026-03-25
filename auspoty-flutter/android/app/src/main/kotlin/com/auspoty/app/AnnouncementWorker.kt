@@ -28,7 +28,10 @@ class AnnouncementWorker(
         const val NOTIF_ID     = 9001
         const val PREFS_NAME   = "auspoty_announce_prefs"
         const val KEY_LAST_ID  = "lastAnnouncementId"
-        const val API_URL      = "https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app/api/announcement"
+        // Baca langsung dari Firestore REST API — tidak bergantung Vercel serverless
+        const val FIRESTORE_URL = "https://firestore.googleapis.com/v1/projects/auspoty-web/databases/(default)/documents/announcements/current?key=AIzaSyAYJEVXTS17vEX4J6_ymevMiJUnWV-Xf8Q"
+        // Fallback: Vercel API
+        const val API_URL_FALLBACK = "https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app/api/announcement"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -72,8 +75,45 @@ class AnnouncementWorker(
     }
 
     private fun fetchAnnouncement(): JSONObject? {
+        // Coba Firestore REST API dulu (langsung, persistent)
+        val firestoreResult = fetchFromFirestore()
+        if (firestoreResult != null) return firestoreResult
+        // Fallback ke Vercel API
+        return fetchFromVercel()
+    }
+
+    private fun fetchFromFirestore(): JSONObject? {
         return try {
-            val conn = URL(API_URL).openConnection() as HttpsURLConnection
+            val conn = URL(FIRESTORE_URL).openConnection() as HttpsURLConnection
+            conn.connectTimeout = 10_000
+            conn.readTimeout    = 10_000
+            conn.setRequestProperty("User-Agent", "AuspotyApp/1.0")
+            val body = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            // Parse Firestore document format ke format biasa
+            val doc = JSONObject(body)
+            val fields = doc.optJSONObject("fields") ?: return JSONObject("""{"status":"none"}""")
+            fun strVal(key: String, default: String = ""): String {
+                return fields.optJSONObject(key)?.optString("stringValue", default) ?: default
+            }
+            val status = strVal("status", "none")
+            if (status != "success") return JSONObject("""{"status":"none"}""")
+            JSONObject().apply {
+                put("status",  "success")
+                put("id",      strVal("id"))
+                put("title",   strVal("title"))
+                put("message", strVal("message"))
+                put("type",    strVal("type", "info"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Firestore fetch error: ${e.message}")
+            null
+        }
+    }
+
+    private fun fetchFromVercel(): JSONObject? {
+        return try {
+            val conn = URL(API_URL_FALLBACK).openConnection() as HttpsURLConnection
             conn.connectTimeout = 15_000
             conn.readTimeout    = 15_000
             conn.setRequestProperty("User-Agent", "AuspotyApp/1.0")
@@ -81,8 +121,8 @@ class AnnouncementWorker(
             conn.disconnect()
             JSONObject(body)
         } catch (e: Exception) {
-            Log.e(TAG, "Fetch error: ${e.message}")
-            null // null = retry akan ditangani oleh caller
+            Log.e(TAG, "Vercel fetch error: ${e.message}")
+            null
         }
     }
 
