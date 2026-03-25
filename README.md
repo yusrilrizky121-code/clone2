@@ -6,7 +6,7 @@
 
 **Aplikasi streaming musik gratis berbasis YouTube Music**
 
-[![Version](https://img.shields.io/badge/version-8.3.0-a78bfa?style=flat-square&logo=github)](https://github.com/yusrilrizky121-code/Auspoty/releases/latest)
+[![Version](https://img.shields.io/badge/version-8.3.1-a78bfa?style=flat-square&logo=github)](https://github.com/yusrilrizky121-code/Auspoty/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Android-3ddc84?style=flat-square&logo=android&logoColor=white)](https://github.com/yusrilrizky121-code/Auspoty/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-54c5f8?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
@@ -39,7 +39,7 @@
 ## 📦 Download & Install
 
 1. Buka halaman **[Releases](https://github.com/yusrilrizky121-code/Auspoty/releases/latest)**
-2. Download file `Auspoty-v8.3.0.apk`
+2. Download file `Auspoty-v8.3.1.apk`
 3. Aktifkan **"Instal dari sumber tidak dikenal"** di pengaturan HP
 4. Install APK
 
@@ -54,7 +54,13 @@
 
 ## 🚀 Changelog
 
-### v8.3.0 — Terbaru
+### v8.3.1 — Terbaru
+- ✅ Fix koleksi lagu diunduh: play/pause sekarang berfungsi
+- ✅ Fix tombol next/prev di lagu diunduh
+- ✅ Auto-next ke lagu berikutnya saat lagu offline selesai
+- ✅ Fix pengumuman admin via Firestore (persistent)
+
+### v8.3.0
 - ✅ Perbaikan performa streaming & playback
 - ✅ Optimasi UI scroll dan animasi
 - ✅ Fix background audio saat layar mati
