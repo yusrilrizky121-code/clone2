@@ -390,7 +390,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     _stopLocalPlayer(injectJs: false);
 
     try {
-      await _localPlayer.setFilePath(found.path);
+      await _localPlayer.setFilePath(found.path,
+        preloadAudio: true,
+      );
+    } catch (e) {
+      debugPrint('setFilePath error: $e');
       await c.evaluateJavascript(source:
         "if(typeof showToast==='function') showToast('Format audio tidak didukung');");
       return;
@@ -1085,13 +1089,18 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                           if(typeof updateProfileUI==='function') updateProfileUI();
                           if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
                           if(typeof showToast==='function') showToast('Selamat datang, '+(p.name||'').split(' ')[0]+'!');
-                          history.replaceState(null,'','/');
                         } catch(e){}
                       })()
                     """);
+                    // Kembali ke halaman utama setelah simpan user data
+                    await c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/')));
                   }
                 }
                 if (urlStr.contains('vercel.app') || urlStr.contains('clone2') || urlStr.isEmpty) {
+                  await _inject(c);
+                }
+                // Inject juga setelah login redirect (userData di URL)
+                if (urlStr.contains('userData=')) {
                   await _inject(c);
                 }
               },

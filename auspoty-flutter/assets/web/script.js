@@ -487,10 +487,6 @@ function playMusicById(videoId) {
 function playDownloadedSong(videoId, title, artist, img) {
     // Stop ytPlayer dulu agar tidak bentrok
     try { if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch(e) {}
-    // Stop offline player juga (kalau ada yang sedang jalan)
-    if (window.flutter_inappwebview) {
-        try { window.flutter_inappwebview.callHandler('stopLocalPlayer'); } catch(e) {}
-    }
 
     currentTrack = { videoId: videoId, title: title, artist: artist, img: img };
     window.currentTrack = currentTrack;
@@ -526,7 +522,7 @@ function playDownloadedSong(videoId, title, artist, img) {
     var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
     stopProgressBar();
 
-    // Set flag dulu sebelum call Dart supaya togglePlay langsung bisa handle
+    // Set flag SEBELUM call Dart — Dart akan konfirmasi via evaluateJavascript
     window._localAudioPlaying = true;
     isPlaying = true;
     updatePlayPauseBtn(true);
