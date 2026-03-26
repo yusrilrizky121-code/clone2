@@ -114,7 +114,7 @@
       });
 
       // Firestore untuk komentar
-      import { getFirestore, collection, addDoc, setDoc, updateDoc, arrayUnion, arrayRemove, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp }
+      import { getFirestore, collection, addDoc, setDoc, updateDoc, getDoc, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp }
         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
       const db_fs = getFirestore(app);
       window._firestoreDB = db_fs;
@@ -122,8 +122,7 @@
       window._fsAddDoc = addDoc;
       window._fsSetDoc = setDoc;
       window._fsUpdateDoc = updateDoc;
-      window._fsArrayUnion = arrayUnion;
-      window._fsArrayRemove = arrayRemove;
+      window._fsGetDoc = getDoc;
       window._fsQuery = query;
       window._fsWhere = where;
       window._fsOrderBy = orderBy;
@@ -164,6 +163,10 @@
 <div id="view-search" class="view-section">
     <div class="search-header-container">
         <h1>Cari</h1>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+            <div class="pill active" id="searchTabMusic" onclick="switchSearchTab('music')">Musik</div>
+            <div class="pill" id="searchTabUsers" onclick="switchSearchTab('users')">Pengguna</div>
+        </div>
     </div>
     <div class="search-box-wrapper">
         <svg class="search-icon-input" viewBox="0 0 24 24"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 101.414-1.414l-4.344-4.344a9.157 9.157 0 002.077-5.816c0-5.14-4.226-9.279-9.407-9.279zm-7.407 9.279c0-4.006 3.302-7.279 7.407-7.279s7.407 3.273 7.407 7.279-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.279z"/></svg>
@@ -175,6 +178,53 @@
     </div>
     <div id="searchResultsUI" style="display:none;">
         <div class="vertical-list" id="searchResults"></div>
+    </div>
+    <div id="userSearchResultsUI" style="display:none;padding:0 16px;">
+        <div class="vertical-list" id="userSearchResults"></div>
+    </div>
+</div>
+
+<!-- USER PROFILE VIEW -->
+<div id="view-user-profile" class="view-section">
+    <div class="playlist-hero-header" style="background:linear-gradient(to bottom, var(--accent), var(--bg-main));">
+        <button class="back-btn" onclick="switchView('search')"><svg viewBox="0 0 24 24"><path d="M15.957 2.793a1 1 0 010 1.414L8.164 12l7.793 7.793a1 1 0 11-1.414 1.414L5.336 12l9.207-9.207a1 1 0 011.414 0z"/></svg></button>
+        <div style="display:flex;justify-content:center;margin:24px 0;">
+            <div id="upvAvatar" style="width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:700;color:white;box-shadow:0 12px 30px rgba(0,0,0,0.4);overflow:hidden;"></div>
+        </div>
+        <h1 id="upvName" style="font-size:26px;font-weight:700;margin-bottom:4px;text-align:center;">Nama Pengguna</h1>
+        <div id="upvEmail" style="font-size:13px;color:var(--text-sub);margin-bottom:20px;text-align:center;">email@example.com</div>
+        
+        <div style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;">
+            <button id="btnFollowUser" onclick="toggleFollowUser()" style="background:white;color:black;border:none;border-radius:20px;padding:8px 24px;font-weight:700;font-size:14px;cursor:pointer;">Ikuti</button>
+            <button id="btnMessageUser" onclick="openChatWithUser()" style="background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:8px 24px;font-weight:700;font-size:14px;cursor:pointer;">Pesan</button>
+        </div>
+        
+        <div style="display:flex;justify-content:center;gap:40px;border-top:1px solid rgba(255,255,255,0.05);padding-top:20px;">
+            <div style="text-align:center;"><div id="upvFollowers" style="font-size:18px;font-weight:700;color:white;">0</div><div style="font-size:11px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;">Pengikut</div></div>
+            <div style="text-align:center;"><div id="upvFollowing" style="font-size:18px;font-weight:700;color:white;">0</div><div style="font-size:11px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;">Mengikuti</div></div>
+        </div>
+    </div>
+    <div class="section-container">
+        <h2 class="section-title">Aktivitas Terakhir</h2>
+        <div id="upvActivity" style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>
+    </div>
+</div>
+
+<!-- CHAT VIEW -->
+<div id="view-chat" class="view-section" style="display:none;flex-direction:column;height:100vh;">
+    <div style="display:flex;align-items:center;padding:16px;background:var(--bg-card);position:sticky;top:0;z-index:10;gap:12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <button class="back-btn" onclick="switchView('user-profile')" style="position:static;width:32px;height:32px;"><svg viewBox="0 0 24 24"><path d="M15.957 2.793a1 1 0 010 1.414L8.164 12l7.793 7.793a1 1 0 11-1.414 1.414L5.336 12l9.207-9.207a1 1 0 011.414 0z"/></svg></button>
+        <div id="chatAvatar" style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:white;overflow:hidden;"></div>
+        <div style="flex:1;"><div id="chatName" style="font-size:15px;font-weight:700;color:white;">Nama</div><div style="font-size:11px;color:var(--spotify-green);">Online</div></div>
+    </div>
+    <div id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;"></div>
+    <div style="padding:12px 16px;background:var(--bg-main);border-top:1px solid rgba(255,255,255,0.05);padding-bottom:100px;">
+        <div style="display:flex;gap:10px;align-items:flex-end;">
+            <textarea id="chatInput" placeholder="Ketik pesan..." style="flex:1;background:rgba(255,255,255,0.08);border:none;border-radius:20px;padding:10px 16px;color:white;font-size:14px;outline:none;resize:none;height:40px;font-family:inherit;"></textarea>
+            <button onclick="sendChatMessage()" style="background:var(--accent);border:none;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+                <svg viewBox="0 0 24 24" style="fill:white;width:20px;height:20px;transform:rotate(-45deg);margin-left:4px;"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -283,6 +333,22 @@
     <div id="googleLogoutBtn" class="settings-group" style="margin-bottom:0;cursor:pointer;display:none;" onclick="logoutFromGoogle()">
         <div class="settings-item">
             <div class="settings-item-left">
+                <div class="settings-icon" style="background:#e74c3c;"><svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg></div>
+                <div><div class="settings-item-title">Keluar</div><div class="settings-item-sub" id="googleLogoutSub"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tombol Cari Pengguna -->
+    <div class="settings-group" style="margin-bottom:0;cursor:pointer;" onclick="openSearchUsers()">
+        <div class="settings-item">
+            <div class="settings-item-left">
+                <div class="settings-icon" style="background:#3b82f6;"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></div>
+                <div><div class="settings-item-title">Cari Pengguna</div><div class="settings-item-sub">Temukan & ikuti pengguna lain</div></div>
+            </div>
+            <svg viewBox="0 0 24 24" class="settings-chevron"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+        </div>
+    </div>
                 <div class="settings-icon" style="background:#c0392b;padding:6px;">
                     <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:white;"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
                 </div>
@@ -446,19 +512,7 @@
         </div>
     </div>
 
-    <!-- Admin Panel — hanya muncul jika login sebagai admin -->
-    <div id="adminAnnouncementBtn" style="display:none;margin-top:8px;">
-        <div class="settings-group-label">Admin</div>
-        <div class="settings-group">
-            <div class="settings-item" onclick="openAnnouncementPanel()">
-                <div class="settings-item-left">
-                    <div class="settings-icon" style="background:linear-gradient(135deg,#a78bfa,#f472b6);"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg></div>
-                    <div><div class="settings-item-title">Kirim Pengumuman</div><div class="settings-item-sub">Notifikasi ke semua pengguna</div></div>
-                </div>
-                <svg viewBox="0 0 24 24" class="settings-chevron"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
-            </div>
-        </div>
-    </div>
+
 
     <div style="height:40px;"></div>
 </div>
@@ -564,6 +618,9 @@
             <div class="ctrl-btn" onclick="openCommentsModal()" title="Komentar">
                 <svg viewBox="0 0 24 24" style="width:24px;height:24px;"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
             </div>
+            <div class="ctrl-btn" id="btnSubscribe" onclick="toggleSubscribe()" title="Subscribe Lagu">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:rgba(255,255,255,0.7);"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+            </div>
         </div>
     </div>
 </div>
@@ -628,7 +685,6 @@
         <div id="commentTrackName" style="font-size:12px;color:var(--text-sub);margin-bottom:16px;"></div>
         <div id="commentsList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:8px;"></div>
         <div id="commentInputArea" style="margin-top:12px;display:none;">
-            <div id="cancelReplyBtn" onclick="_cancelReply()" style="display:none;font-size:12px;color:var(--accent);margin-bottom:6px;cursor:pointer;">✕ Batal balas</div>
             <div style="display:flex;gap:10px;align-items:flex-end;">
                 <textarea id="commentInput" placeholder="Tulis komentar..." style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:10px 14px;color:white;font-size:14px;outline:none;resize:none;height:44px;font-family:inherit;"></textarea>
                 <button onclick="submitComment()" style="background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;padding:10px 16px;color:white;font-weight:700;cursor:pointer;font-size:14px;height:44px;white-space:nowrap;">Kirim</button>
@@ -734,6 +790,50 @@
             Masuk dengan Google
         </button>
         <button onclick="closeLoginModal()" style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);padding:10px 28px;border-radius:20px;font-size:13px;cursor:pointer;width:100%;">Nanti saja</button>
+    </div>
+</div>
+
+<!-- USER PROFILE MODAL -->
+<div id="userProfileModal" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.85);align-items:flex-end;justify-content:center;">
+    <div style="background:#1a1a2e;width:100%;border-radius:20px 20px 0 0;padding:24px 20px 40px;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h3 style="font-size:18px;font-weight:700;color:white;">Profil Pengguna</h3>
+            <div onclick="closeUserProfile()" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:white;font-size:18px;">✕</div>
+        </div>
+        <div id="userProfileContent"></div>
+    </div>
+</div>
+
+<!-- SEARCH USERS MODAL -->
+<div id="searchUsersModal" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.85);align-items:flex-end;justify-content:center;">
+    <div style="background:#1a1a2e;width:100%;border-radius:20px 20px 0 0;padding:24px 20px 40px;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="font-size:18px;font-weight:700;color:white;">Cari Pengguna</h3>
+            <div onclick="closeSearchUsers()" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:white;font-size:18px;">✕</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+            <input id="searchUserInput" type="text" placeholder="Cari nama pengguna..." style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:12px 14px;color:white;font-size:14px;outline:none;" onkeydown="if(event.key==='Enter')searchUsers()">
+            <button onclick="searchUsers()" style="background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;padding:12px 18px;color:white;font-weight:700;cursor:pointer;">Cari</button>
+        </div>
+        <div id="searchUserResults"></div>
+    </div>
+</div>
+
+<!-- DIRECT MESSAGE MODAL -->
+<div id="dmModal" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.85);align-items:flex-end;justify-content:center;">
+    <div style="background:#1a1a2e;width:100%;border-radius:20px 20px 0 0;padding:0;max-height:90vh;display:flex;flex-direction:column;">
+        <div style="padding:16px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.08);">
+            <div>
+                <h3 id="dmTitle" style="font-size:16px;font-weight:700;color:white;margin:0;"></h3>
+                <p id="dmSubtitle" style="font-size:12px;color:var(--text-sub);margin:2px 0 0;"></p>
+            </div>
+            <div onclick="closeDM()" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:white;font-size:18px;">✕</div>
+        </div>
+        <div id="dmMessages" style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-height:200px;max-height:50vh;"></div>
+        <div style="padding:12px 20px 32px;border-top:1px solid rgba(255,255,255,0.08);display:flex;gap:10px;">
+            <input id="dmInput" type="text" placeholder="Tulis pesan..." style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:10px 16px;color:white;font-size:14px;outline:none;" onkeydown="if(event.key==='Enter')sendDM()">
+            <button onclick="sendDM()" style="background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:50%;width:40px;height:40px;color:white;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">➤</button>
+        </div>
     </div>
 </div>
 
