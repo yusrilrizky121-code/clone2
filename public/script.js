@@ -11,12 +11,13 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 // INDEXEDDB
 let db;
-const dbReq = indexedDB.open('AuspotyDB', 2);
+const dbReq = indexedDB.open('AuspotyDB', 3);
 dbReq.onupgradeneeded = (e) => {
     db = e.target.result;
     if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'id' });
     if (!db.objectStoreNames.contains('liked_songs')) db.createObjectStore('liked_songs', { keyPath: 'videoId' });
     if (!db.objectStoreNames.contains('downloaded_songs')) db.createObjectStore('downloaded_songs', { keyPath: 'videoId' });
+    if (!db.objectStoreNames.contains('subscribed_songs')) db.createObjectStore('subscribed_songs', { keyPath: 'videoId' });
 };
 dbReq.onsuccess = (e) => { db = e.target.result; renderLibraryUI(); };
 
@@ -131,6 +132,13 @@ function getHighResImage(url) {
 function playMusic(videoId, encodedData) {
     currentTrack = JSON.parse(decodeURIComponent(encodedData));
     window.currentTrack = currentTrack;
+    // Stop local audio if playing
+    if (window._localAudioPlaying && window.flutter_inappwebview) {
+        try { window.flutter_inappwebview.callHandler('stopLocalPlayer'); } catch(e) {}
+    }
+    // Reset downloaded mode saat main lagu streaming
+    window._localAudioPlaying = false;
+    window._isDownloadedView = false;
 
     if (!songHistory.length || songHistory[songHistory.length-1].videoId !== currentTrack.videoId) {
         songHistory.push(Object.assign({}, currentTrack));
@@ -144,6 +152,7 @@ function playMusic(videoId, encodedData) {
     } catch(e) {}
 
     checkIfLiked(currentTrack.videoId);
+    checkIfSubscribed(currentTrack.videoId);
     updateMediaSession();
 
     var _mp = document.getElementById('miniPlayer');
@@ -193,18 +202,30 @@ function playMusic(videoId, encodedData) {
 function togglePlay() {
     // Check if playing local offline audio
     if (window._localAudioPlaying) {
+        if (window.flutter_inappwebview) {
+            try { 
+                // Toggle state locally first for responsiveness
+                isPlaying = !isPlaying;
+                updatePlayPauseBtn(isPlaying);
+                window.flutter_inappwebview.callHandler('toggleLocalPlay'); 
+            } catch(e) {
+                console.error("Local play toggle error:", e);
+                // Fallback toggle back
+                isPlaying = !isPlaying;
+                updatePlayPauseBtn(isPlaying);
+            }
+            return;
+        }
         var au = document.getElementById('bgAudio');
         if (au) {
             if (!au.paused) {
                 au.pause();
                 isPlaying = false;
                 updatePlayPauseBtn(false);
-                if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
             } else {
                 au.play().catch(function(){});
                 isPlaying = true;
                 updatePlayPauseBtn(true);
-                if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
             }
             return;
         }
@@ -212,9 +233,13 @@ function togglePlay() {
     if (!ytPlayer) return;
     if (isPlaying) {
         ytPlayer.pauseVideo();
+        isPlaying = false;
+        updatePlayPauseBtn(false);
         if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
     } else {
         ytPlayer.playVideo();
+        isPlaying = true;
+        updatePlayPauseBtn(true);
         if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
     }
 }
@@ -256,10 +281,20 @@ function startProgressBar() {
         if (!modalVis && !miniVis) return;
 
         var cur = 0, dur = 0;
-        var au = window._localAudioPlaying ? document.getElementById('bgAudio') : null;
-        if (au && !isNaN(au.duration) && au.duration > 0) {
-            cur = au.currentTime;
-            dur = au.duration;
+        // In APK/Flutter, progress is pushed from Dart side via evaluateJavascript
+        // so we don't try to read from HTML audio element if window._localAudioPlaying is true
+        if (window._localAudioPlaying) {
+            // For APK, the Dart side updates the UI directly.
+            // For Web, if there's a bgAudio, we use it.
+            if (!window.flutter_inappwebview) {
+                var au = document.getElementById('bgAudio');
+                if (au && !isNaN(au.duration) && au.duration > 0) {
+                    cur = au.currentTime;
+                    dur = au.duration;
+                }
+            } else {
+                // In APK, wait for Dart updates. Just keep the loop alive for ytPlayer fallback.
+            }
         } else if (ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
             dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
@@ -315,12 +350,16 @@ function toggleRepeat() {
     showToast(isRepeat ? 'Ulangi aktif' : 'Ulangi nonaktif');
 }
 function playPrevSong() {
+    if (window._isDownloadedView) { playPrevDownloadedSong(); return; }
     if (songHistory.length < 2) { showToast('Tidak ada lagu sebelumnya'); return; }
     songHistory.pop();
     const prev = songHistory[songHistory.length - 1];
     if (prev) playMusic(prev.videoId, makeTrackData(prev));
 }
-function playNextSong() { playNextSimilarSong(); }
+function playNextSong() {
+    if (window._isDownloadedView) { playNextDownloadedSong(); return; }
+    playNextSimilarSong();
+}
 
 // LYRICS
 let lyricsLines = [], lyricsScrollInterval = null, currentHighlightIdx = -1, lyricsType = 'plain';
@@ -479,19 +518,35 @@ function _cacheTrack(t) {
     window._trackCache[t.videoId] = { videoId: t.videoId, title: t.title || '', artist: t.artist || 'Unknown', img: getHighResImage(t.thumbnail || t.img || '') };
 }
 function playMusicById(videoId) {
+    // Jika sedang di view unduhan, cari lagu tersebut di koleksi unduhan
+    if (window._isDownloadedView && window._playlistTracks) {
+        const t = window._playlistTracks.find(track => track.videoId === videoId);
+        if (t) {
+            playDownloadedSong(t.videoId, t.title || '', t.artist || '', getHighResImage(t.thumbnail || t.img || ''));
+            return;
+        }
+    }
     const t = window._trackCache[videoId];
     if (t) playMusic(t.videoId, makeTrackData(t));
 }
 // Khusus untuk lagu yang sudah diunduh — langsung panggil playLocalFile
 // tanpa butuh _trackCache atau koneksi internet
 function playDownloadedSong(videoId, title, artist, img) {
+    // Stop local player if already playing one, to be sure
+    if (window._localAudioPlaying && window.flutter_inappwebview) {
+        try { window.flutter_inappwebview.callHandler('stopLocalPlayer'); } catch(e) {}
+    }
     // Stop ytPlayer dulu agar tidak bentrok
     try { if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch(e) {}
-    window._localAudioPlaying = false;
-    isPlaying = false;
-
+    window._localAudioPlaying = true;
+    isPlaying = true;
     currentTrack = { videoId: videoId, title: title, artist: artist, img: img };
     window.currentTrack = currentTrack;
+    // Set index di _playlistTracks supaya next/prev bisa jalan
+    if (window._playlistTracks && window._isDownloadedView) {
+        window._downloadedQueueIndex = window._playlistTracks.findIndex(t => t.videoId === videoId);
+    }
+    updatePlayPauseBtn(true);
     var _mp = document.getElementById('miniPlayer');
     var _mpi = document.getElementById('miniPlayerImg');
     var _mpt = document.getElementById('miniPlayerTitle');
@@ -516,8 +571,15 @@ function playDownloadedSong(videoId, title, artist, img) {
     if (_mf) _mf.style.width = '0%';
     var _ct = document.getElementById('currentTime'); if (_ct) _ct.innerText = '0:00';
     var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
-    stopProgressBar();
+    checkIfLiked(videoId);
+    checkIfSubscribed(videoId);
     updateMediaSession();
+    // Update media session next/prev untuk downloaded queue
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('nexttrack', playNextDownloadedSong);
+        navigator.mediaSession.setActionHandler('previoustrack', playPrevDownloadedSong);
+    }
+    startProgressBar();
     if (window.flutter_inappwebview) {
         try {
             window.flutter_inappwebview.callHandler('playLocalFile', title, artist, img, videoId);
@@ -526,6 +588,25 @@ function playDownloadedSong(videoId, title, artist, img) {
         showToast('Fitur offline hanya tersedia di aplikasi APK');
     }
 }
+
+function playNextDownloadedSong() {
+    if (!window._isDownloadedView || !window._playlistTracks) { playNextSimilarSong(); return; }
+    const tracks = window._playlistTracks;
+    let idx = (window._downloadedQueueIndex !== undefined) ? window._downloadedQueueIndex : -1;
+    idx = (idx + 1) % tracks.length;
+    const t = tracks[idx];
+    if (t) playDownloadedSong(t.videoId, t.title || '', t.artist || '', getHighResImage(t.thumbnail || t.img || ''));
+}
+
+function playPrevDownloadedSong() {
+    if (!window._isDownloadedView || !window._playlistTracks) { playPrevSong(); return; }
+    const tracks = window._playlistTracks;
+    let idx = (window._downloadedQueueIndex !== undefined) ? window._downloadedQueueIndex : 0;
+    idx = (idx - 1 + tracks.length) % tracks.length;
+    const t = tracks[idx];
+    if (t) playDownloadedSong(t.videoId, t.title || '', t.artist || '', getHighResImage(t.thumbnail || t.img || ''));
+}
+
 function renderVItem(t) {
     _cacheTrack(t);
     return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
@@ -726,17 +807,243 @@ document.addEventListener('scroll', _onScrollStart, { passive: true });
 document.addEventListener('touchmove', _onScrollStart, { passive: true });
 
 document.addEventListener('DOMContentLoaded', function() {
+    updateProfileUI();
     const inp = document.getElementById('searchInput');
     if (inp) {
         let searchTimer;
         inp.addEventListener('input', function() {
             const q = this.value.trim();
-            if (!q) { document.getElementById('searchCategoriesUI').style.display = 'block'; document.getElementById('searchResultsUI').style.display = 'none'; return; }
+            if (!q) { 
+                document.getElementById('searchCategoriesUI').style.display = 'block'; 
+                document.getElementById('searchResultsUI').style.display = 'none'; 
+                document.getElementById('userSearchResultsUI').style.display = 'none';
+                return; 
+            }
             clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => doSearch(q), 500);
+            searchTimer = setTimeout(() => {
+                if (_searchTab === 'music') doSearch(q);
+                else doUserSearch(q);
+            }, 500);
         });
     }
 });
+
+let _searchTab = 'music';
+function switchSearchTab(tab) {
+    _searchTab = tab;
+    document.getElementById('searchTabMusic').classList.toggle('active', tab === 'music');
+    document.getElementById('searchTabUsers').classList.toggle('active', tab === 'users');
+    const q = document.getElementById('searchInput').value.trim();
+    if (q) {
+        if (tab === 'music') doSearch(q);
+        else doUserSearch(q);
+    }
+}
+
+async function doUserSearch(q) {
+    document.getElementById('searchCategoriesUI').style.display = 'none';
+    document.getElementById('searchResultsUI').style.display = 'none';
+    document.getElementById('userSearchResultsUI').style.display = 'block';
+    const el = document.getElementById('userSearchResults');
+    el.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Mencari pengguna...</div>';
+    try {
+        const db_fs = window._firestoreDB;
+        if (!db_fs) return;
+        // Firestore doesn't support full-text search easily without Algolia, 
+        // but we can do a simple prefix search if name is stored lowercased or just fetch all and filter for now
+        // For this app, let's fetch all users from a 'users' collection or search in comments for now.
+        // Actually, a better way is to have a 'users' collection.
+        const snap = await window._fsGetDocs(window._fsCollection(db_fs, 'users'));
+        const users = snap.docs.map(doc => doc.data()).filter(u => 
+            u.name.toLowerCase().includes(q.toLowerCase()) || 
+            u.email.toLowerCase().includes(q.toLowerCase())
+        );
+        
+        if (users.length > 0) {
+            el.innerHTML = users.map(u => 
+                '<div class="v-item" onclick="viewUserProfile(\'' + u.email + '\')">' +
+                '<div style="width:48px;height:48px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;overflow:hidden;flex-shrink:0;">' + 
+                (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : u.name.charAt(0).toUpperCase()) + '</div>' +
+                '<div class="v-info"><div class="v-title">' + u.name + '</div><div class="v-sub">' + u.email + '</div></div></div>'
+            ).join('');
+        } else {
+            el.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Tidak ada pengguna ditemukan untuk "' + q + '"</div>';
+        }
+    } catch(e) { el.innerHTML = '<div style="color:#ff5252;padding:16px;text-align:center;">Gagal mencari.</div>'; }
+}
+
+async function viewUserProfile(email) {
+    if (!email) return;
+    switchView('user-profile');
+    document.getElementById('upvName').innerText = 'Memuat...';
+    document.getElementById('upvEmail').innerText = email;
+    document.getElementById('upvAvatar').innerHTML = '';
+    document.getElementById('upvAvatar').innerText = '';
+    
+    try {
+        const db_fs = window._firestoreDB;
+        const q = window._fsQuery(window._fsCollection(db_fs, 'users'), window._fsWhere('email', '==', email));
+        const snap = await window._fsGetDocs(q);
+        if (!snap.empty) {
+            const u = snap.docs[0].data();
+            document.getElementById('upvName').innerText = u.name;
+            if (u.picture) document.getElementById('upvAvatar').innerHTML = '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">';
+            else document.getElementById('upvAvatar').innerText = u.name.charAt(0).toUpperCase();
+            
+            // Update follow counts
+            document.getElementById('upvFollowers').innerText = (u.followers || []).length;
+            document.getElementById('upvFollowing').innerText = (u.following || []).length;
+            
+            const currentUser = getGoogleUser();
+            const isFollowing = currentUser && (u.followers || []).includes(currentUser.email);
+            const btn = document.getElementById('btnFollowUser');
+            if (btn) {
+                btn.innerText = isFollowing ? 'Diikuti' : 'Ikuti';
+                btn.style.background = isFollowing ? 'rgba(255,255,255,0.1)' : 'white';
+                btn.style.color = isFollowing ? 'white' : 'black';
+            }
+            
+            window._viewingUser = u;
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function toggleFollowUser() {
+    const currentUser = getGoogleUser(); if (!currentUser) { showToast('Login dulu untuk mengikuti'); return; }
+    const targetUser = window._viewingUser; if (!targetUser) return;
+    if (currentUser.email === targetUser.email) { showToast('Tidak bisa mengikuti diri sendiri'); return; }
+    
+    try {
+        const db_fs = window._firestoreDB;
+        // 1. Update target user's followers
+        const targetRef = window._fsDoc(db_fs, 'users', targetUser.email); // Assume email is doc ID
+        let followers = targetUser.followers || [];
+        if (followers.includes(currentUser.email)) {
+            followers = followers.filter(e => e !== currentUser.email);
+        } else {
+            followers.push(currentUser.email);
+        }
+        await window._fsSetDoc(targetRef, { followers: followers }, { merge: true });
+        
+        // 2. Update current user's following
+        const currentRef = window._fsDoc(db_fs, 'users', currentUser.email);
+        const currentSnap = await window._fsGetDoc(currentRef);
+        let following = [];
+        if (currentSnap.exists()) following = currentSnap.data().following || [];
+        if (following.includes(targetUser.email)) {
+            following = following.filter(e => e !== targetUser.email);
+        } else {
+            following.push(targetUser.email);
+        }
+        await window._fsSetDoc(currentRef, { following: following }, { merge: true });
+        
+        viewUserProfile(targetUser.email);
+    } catch(e) { showToast('Gagal mengikuti'); }
+}
+
+// MESSAGING
+let _chatInterval = null;
+function openChatWithUser() {
+    const targetUser = window._viewingUser; if (!targetUser) return;
+    const currentUser = getGoogleUser(); if (!currentUser) { showToast('Login dulu untuk berkirim pesan'); return; }
+    
+    switchView('chat');
+    document.getElementById('chatName').innerText = targetUser.name;
+    const av = document.getElementById('chatAvatar');
+    if (targetUser.picture) av.innerHTML = '<img src="' + targetUser.picture + '" style="width:100%;height:100%;object-fit:cover;">';
+    else av.innerText = targetUser.name.charAt(0).toUpperCase();
+    
+    loadChatMessages(targetUser.email);
+    if (_chatInterval) clearInterval(_chatInterval);
+    _chatInterval = setInterval(() => loadChatMessages(targetUser.email), 5000);
+}
+
+async function loadChatMessages(otherEmail) {
+    const currentUser = getGoogleUser(); if (!currentUser) return;
+    const list = document.getElementById('chatMessages');
+    try {
+        const db_fs = window._firestoreDB;
+        // Simple chat: query messages where (from == me AND to == him) OR (from == him AND to == me)
+        const q1 = window._fsQuery(window._fsCollection(db_fs, 'messages'), 
+                    window._fsWhere('from', '==', currentUser.email), 
+                    window._fsWhere('to', '==', otherEmail));
+        const q2 = window._fsQuery(window._fsCollection(db_fs, 'messages'), 
+                    window._fsWhere('from', '==', otherEmail), 
+                    window._fsWhere('to', '==', currentUser.email));
+        
+        const [snap1, snap2] = await Promise.all([window._fsGetDocs(q1), window._fsGetDocs(q2)]);
+        const allMsgs = [...snap1.docs, ...snap2.docs].map(d => d.data());
+        allMsgs.sort((a, b) => (a.at ? a.at.seconds : 0) - (b.at ? b.at.seconds : 0));
+        
+        list.innerHTML = allMsgs.map(m => {
+            const isMe = m.from === currentUser.email;
+            return '<div style="max-width:80%; align-self:' + (isMe ? 'flex-end' : 'flex-start') + '; background:' + (isMe ? 'var(--accent)' : 'rgba(255,255,255,0.1)') + '; color:white; padding:8px 14px; border-radius:18px; font-size:14px;">' + m.text + '</div>';
+        }).join('');
+        list.scrollTop = list.scrollHeight;
+    } catch(e) {}
+}
+
+async function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim(); if (!text) return;
+    const currentUser = getGoogleUser();
+    const targetUser = window._viewingUser;
+    if (!currentUser || !targetUser) return;
+    
+    try {
+        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'messages'), {
+            from: currentUser.email,
+            to: targetUser.email,
+            text: text,
+            at: window._fsTimestamp()
+        });
+        input.value = '';
+        loadChatMessages(targetUser.email);
+    } catch(e) { showToast('Gagal mengirim pesan'); }
+}
+
+// SUBSCRIBE SONG
+function checkIfSubscribed(videoId) {
+    if (!db) return;
+    const tx = db.transaction('subscribed_songs', 'readonly');
+    tx.objectStore('subscribed_songs').get(videoId).onsuccess = (e) => {
+        const subbed = !!e.target.result;
+        const btn = document.getElementById('btnSubscribe');
+        if (btn) {
+            btn.querySelector('svg').style.fill = subbed ? 'var(--spotify-green)' : 'rgba(255,255,255,0.7)';
+        }
+    };
+}
+
+function toggleSubscribe() {
+    if (!currentTrack || !db) return;
+    const tx = db.transaction('subscribed_songs', 'readwrite');
+    const store = tx.objectStore('subscribed_songs');
+    store.get(currentTrack.videoId).onsuccess = (e) => {
+        if (e.target.result) {
+            store.delete(currentTrack.videoId); showToast('Berhenti subscribe lagu');
+        } else {
+            store.put(currentTrack); showToast('Subscribe lagu ini!');
+        }
+        checkIfSubscribed(currentTrack.videoId);
+        renderLibraryUI();
+    };
+}
+
+// Update renderLibraryUI to show Subscribed section
+function openSubscribedSongs() {
+    if (!db) return;
+    const tx = db.transaction('subscribed_songs', 'readonly');
+    tx.objectStore('subscribed_songs').getAll().onsuccess = (e) => {
+        const tracks = e.target.result || [];
+        document.getElementById('playlistNameDisplay').innerText = 'Lagu di Subscribe';
+        document.getElementById('playlistStatsDisplay').innerText = tracks.length + ' lagu';
+        document.getElementById('playlistImageDisplay').src = tracks.length > 0 ? (tracks[0].img || '') : 'https://via.placeholder.com/220x220?text=music';
+        window._playlistTracks = tracks;
+        document.getElementById('playlistTracksContainer').innerHTML = tracks.length > 0 ? tracks.map(renderVItem).join('') : '<div style="color:var(--text-sub);padding:16px;">Belum ada lagu yang di subscribe.</div>';
+        switchView('playlist');
+    };
+}
 async function doSearch(q) {
     document.getElementById('searchCategoriesUI').style.display = 'none';
     document.getElementById('searchResultsUI').style.display = 'block';
@@ -800,15 +1107,17 @@ function toggleLike() {
 // LIBRARY
 function renderLibraryUI() {
     const container = document.getElementById('libraryContainer'); if (!container || !db) return;
-    const tx = db.transaction(['liked_songs', 'playlists', 'downloaded_songs'], 'readonly');
-    let liked = [], playlists = [], downloaded = [];
+    const tx = db.transaction(['liked_songs', 'playlists', 'downloaded_songs', 'subscribed_songs'], 'readonly');
+    let liked = [], playlists = [], downloaded = [], subscribed = [];
     tx.objectStore('liked_songs').getAll().onsuccess = (e) => { liked = e.target.result || []; };
     tx.objectStore('playlists').getAll().onsuccess = (e) => { playlists = e.target.result || []; };
     tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => { downloaded = e.target.result || []; };
+    tx.objectStore('subscribed_songs').getAll().onsuccess = (e) => { subscribed = e.target.result || []; };
     tx.oncomplete = () => {
         const history = JSON.parse(localStorage.getItem('auspotyHistory') || '[]');
         let html = '';
         html += '<div class="lib-item" onclick="openLikedSongs()"><div class="lib-item-img liked"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu yang Disukai</div><div class="lib-item-sub">Playlist \u00b7 ' + liked.length + ' lagu</div></div></div>';
+        html += '<div class="lib-item" onclick="openSubscribedSongs()"><div class="lib-item-img" style="background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu di Subscribe</div><div class="lib-item-sub">Koleksi \u00b7 ' + subscribed.length + ' lagu</div></div></div>';
         html += '<div class="lib-item" onclick="openHistoryView()"><div class="lib-item-img" style="background:linear-gradient(135deg,#1e3264,#477d95);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Riwayat Diputar</div><div class="lib-item-sub">Koleksi \u00b7 ' + history.length + ' lagu</div></div></div>';
         html += '<div class="lib-item" onclick="openDownloadedSongs()"><div class="lib-item-img" style="background:linear-gradient(135deg,#2d6a4f,#739c18);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu Diunduh</div><div class="lib-item-sub">Koleksi \u00b7 ' + downloaded.length + ' lagu</div></div></div>';
         playlists.forEach(pl => {
@@ -1000,17 +1309,22 @@ function saveProfile() {
     const name = document.getElementById('editProfileName').value.trim() || 'Pengguna Auspoty';
     saveSettings({ profileName: name }); applyAllSettings(); updateProfileUI(); closeEditProfile(); showToast('Profil disimpan!');
 }
-function triggerPhotoUpload() { document.getElementById('profilePhotoInput').click(); }
+function triggerPhotoUpload() {
+    if (window.flutter_inappwebview) {
+        try { window.flutter_inappwebview.callHandler('pickProfilePhoto'); return; } catch(e) {}
+    }
+    document.getElementById('profilePhotoInput').click();
+}
+function applyProfilePhoto(base64) {
+    localStorage.setItem('auspotyProfilePhoto', base64);
+    updateProfileUI();
+    showToast('Foto profil diperbarui!');
+}
 function handleProfilePhotoChange(event) {
     const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        const base64 = e.target.result;
-        localStorage.setItem('auspotyProfilePhoto', base64);
-        const av = document.getElementById('editProfileAvatar'); if (av) av.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-        const settAv = document.getElementById('settingsAvatar'); if (settAv) settAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-        const homeAv = document.querySelector('.app-avatar'); if (homeAv) homeAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-        showToast('Foto profil diperbarui!');
+        applyProfilePhoto(e.target.result);
     };
     reader.readAsDataURL(file);
 }
@@ -1069,13 +1383,28 @@ function updateGoogleLoginUI() { updateProfileUI(); }
 function updateProfileUI() {
     const user = getGoogleUser(); const s = getSettings();
     const name = user ? user.name : (s.profileName || 'Pengguna Auspoty');
-    const pic  = user ? user.picture : (localStorage.getItem('auspotyProfilePhoto') || '');
+    const manualPic = localStorage.getItem('auspotyProfilePhoto');
+    const pic = manualPic || (user ? user.picture : '');
+    
+    // Sync to Firestore users collection
+    if (user && user.email && window._firestoreDB) {
+        window._fsSetDoc(window._fsDoc(window._firestoreDB, 'users', user.email), {
+            name: name,
+            email: user.email,
+            picture: pic,
+            lastSeen: window._fsTimestamp()
+        }, { merge: true }).catch(e => console.error('Sync profile error:', e));
+    }
+
     const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = name;
     const psub = document.getElementById('settingsProfileSub'); if (psub) psub.innerText = user ? user.email : 'Auspoty Premium';
     const pav = document.getElementById('settingsAvatar');
     if (pav) { if (pic) pav.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; else { pav.innerHTML = ''; pav.innerText = name.charAt(0).toUpperCase(); } }
     const hav = document.querySelector('.app-avatar');
     if (hav) { if (pic) hav.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; else { hav.innerHTML = ''; hav.innerText = name.charAt(0).toUpperCase(); } }
+    const epav = document.getElementById('editProfileAvatar');
+    if (epav) { if (pic) epav.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; else { epav.innerHTML = ''; epav.innerText = name.charAt(0).toUpperCase(); } }
+    
     const loginBtn = document.getElementById('googleLoginBtn'); if (loginBtn) loginBtn.style.display = user ? 'none' : 'block';
     const logoutBtn = document.getElementById('googleLogoutBtn'); if (logoutBtn) logoutBtn.style.display = user ? 'block' : 'none';
     const logoutSub = document.getElementById('googleLogoutSub'); if (logoutSub && user) logoutSub.innerText = user.email;
@@ -1103,23 +1432,115 @@ async function loadComments(videoId) {
         const q = window._fsQuery(window._fsCollection(db_fs, 'comments'), window._fsWhere('videoId', '==', videoId));
         const snap = await window._fsGetDocs(q);
         if (snap.empty) { list.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;font-size:13px;">Belum ada komentar. Jadilah yang pertama!</div>'; return; }
-        const docs = snap.docs.map(doc => doc.data());
-        docs.sort((a, b) => (b.createdAt ? b.createdAt.seconds : 0) - (a.createdAt ? a.createdAt.seconds : 0));
-        list.innerHTML = docs.map(d => {
-            const isAdmin = d.email === 'yusrilrizky149@gmail.com';
-            const badge = isAdmin ? '<span style="background:linear-gradient(135deg,#a78bfa,#f472b6);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;">ADMIN</span>' : '<span style="background:rgba(255,255,255,0.1);color:var(--text-sub);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px;">Pengguna</span>';
-            const time = d.createdAt ? new Date(d.createdAt.seconds * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-            return '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">' + (d.picture ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;">' : d.name.charAt(0).toUpperCase()) + '</div><div style="flex:1;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;"><span style="font-size:13px;font-weight:700;color:var(--accent);">' + d.name + badge + '</span><span style="font-size:11px;color:var(--text-sub);">' + time + '</span></div><p style="font-size:14px;color:white;line-height:1.5;margin:0;">' + d.text + '</p></div></div>';
-        }).join('');
+        
+        const currentUser = getGoogleUser();
+        const docs = snap.docs.map(doc => {
+            const data = doc.data();
+            data.id = doc.id;
+            return data;
+        });
+        
+        // Pisahkan parent comments dan replies
+        const parents = docs.filter(d => !d.parentId).sort((a, b) => (b.createdAt ? b.createdAt.seconds : 0) - (a.createdAt ? a.createdAt.seconds : 0));
+        const replies = docs.filter(d => d.parentId);
+
+        list.innerHTML = parents.map(d => renderCommentItem(d, replies, currentUser)).join('');
     } catch(e) { list.innerHTML = '<div style="color:#ff5252;text-align:center;padding:20px;font-size:13px;">Gagal memuat: ' + e.message + '</div>'; }
 }
+
+function renderCommentItem(d, allReplies, currentUser, isReply = false) {
+    const isAdmin = d.email === 'yusrilrizky149@gmail.com';
+    const isOwner = currentUser && currentUser.email === d.email;
+    const canDelete = isOwner || (currentUser && currentUser.email === 'yusrilrizky149@gmail.com');
+    
+    const badge = isAdmin ? '<span style="background:linear-gradient(135deg,#a78bfa,#f472b6);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;">ADMIN</span>' : '<span style="background:rgba(255,255,255,0.1);color:var(--text-sub);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px;">Pengguna</span>';
+    const time = d.createdAt ? new Date(d.createdAt.seconds * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    
+    const likes = d.likes || [];
+    const isLiked = currentUser && likes.includes(currentUser.email);
+    const likeColor = isLiked ? 'var(--accent)' : 'var(--text-sub)';
+    
+    let html = '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;' + (isReply ? 'margin-left:40px;scale:0.95;transform-origin:left;' : '') + '">' +
+        '<div onclick="viewUserProfile(\'' + d.email + '\')" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;cursor:pointer;">' + 
+        (d.picture ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;">' : d.name.charAt(0).toUpperCase()) + '</div>' +
+        '<div style="flex:1;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
+        '<span onclick="viewUserProfile(\'' + d.email + '\')" style="font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">' + d.name + badge + '</span>' +
+        '<span style="font-size:11px;color:var(--text-sub);">' + time + '</span></div>' +
+        '<p style="font-size:14px;color:white;line-height:1.5;margin:0;">' + d.text + '</p>' +
+        '<div style="display:flex;gap:16px;margin-top:8px;align-items:center;">' +
+        '<div onclick="toggleLikeComment(\'' + d.id + '\')" style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:' + likeColor + ';">' +
+        '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:' + likeColor + ';"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>' + (likes.length || 0) + '</div>' +
+        (!isReply ? '<div onclick="replyToComment(\'' + d.id + '\', \'' + d.name + '\')" style="font-size:12px;color:var(--text-sub);cursor:pointer;">Balas</div>' : '') +
+        (canDelete ? '<div onclick="deleteComment(\'' + d.id + '\')" style="font-size:12px;color:#ff5252;cursor:pointer;margin-left:auto;">Hapus</div>' : '') +
+        '</div></div></div>';
+    
+    // Render replies
+    if (!isReply) {
+        const itemReplies = allReplies.filter(r => r.parentId === d.id).sort((a, b) => (a.createdAt ? a.createdAt.seconds : 0) - (b.createdAt ? b.createdAt.seconds : 0));
+        html += itemReplies.map(r => renderCommentItem(r, [], currentUser, true)).join('');
+    }
+    
+    return html;
+}
+
+let _replyingTo = null;
+function replyToComment(id, name) {
+    _replyingTo = { id, name };
+    const input = document.getElementById('commentInput');
+    input.placeholder = 'Membalas ' + name + '...';
+    input.focus();
+    showToast('Membalas ' + name);
+}
+
+async function deleteComment(id) {
+    if (!confirm('Hapus komentar ini?')) return;
+    try {
+        await window._fsDeleteDoc(window._fsDoc(window._firestoreDB, 'comments', id));
+        showToast('Komentar dihapus');
+        loadComments(currentTrack.videoId);
+    } catch(e) { showToast('Gagal hapus: ' + e.message); }
+}
+
+async function toggleLikeComment(id) {
+    const user = getGoogleUser(); if (!user) { showToast('Login dulu untuk memberi Like'); return; }
+    try {
+        const docRef = window._fsDoc(window._firestoreDB, 'comments', id);
+        const docSnap = await window._fsGetDoc(docRef);
+        if (!docSnap.exists()) return;
+        const data = docSnap.data();
+        let likes = data.likes || [];
+        if (likes.includes(user.email)) {
+            likes = likes.filter(e => e !== user.email);
+        } else {
+            likes.push(user.email);
+        }
+        await window._fsUpdateDoc(docRef, { likes: likes });
+        loadComments(currentTrack.videoId);
+    } catch(e) { console.error(e); }
+}
+
 async function submitComment() {
     const user = getGoogleUser(); if (!user) { showToast('Login dulu untuk berkomentar'); return; }
     if (!currentTrack) return;
     const input = document.getElementById('commentInput'); const text = input.value.trim();
     if (!text) { showToast('Komentar tidak boleh kosong'); return; }
     try {
-        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'comments'), { videoId: currentTrack.videoId, name: user.name, email: user.email, picture: user.picture || '', text: text, createdAt: window._fsTimestamp() });
+        const commentData = { 
+            videoId: currentTrack.videoId, 
+            name: user.name, 
+            email: user.email, 
+            picture: user.picture || '', 
+            text: text, 
+            createdAt: window._fsTimestamp(),
+            likes: []
+        };
+        if (_replyingTo) {
+            commentData.parentId = _replyingTo.id;
+            _replyingTo = null;
+            input.placeholder = 'Tulis komentar...';
+        }
+        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'comments'), commentData);
         input.value = ''; showToast('Komentar terkirim!'); loadComments(currentTrack.videoId);
     } catch(e) { showToast('Gagal kirim: ' + e.message); }
 }

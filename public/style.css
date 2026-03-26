@@ -202,6 +202,39 @@ a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
     /* solid bg, NO backdrop-filter */
     transform: translateZ(0);
 }
+
+/* ===== CHAT & USER PROFILE ===== */
+#view-chat { display: none; flex-direction: column; height: 100vh; background: var(--bg-base); }
+#chatMessages::-webkit-scrollbar { width: 4px; }
+#chatMessages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+.message-bubble { max-width: 80%; padding: 10px 16px; border-radius: 20px; font-size: 14px; line-height: 1.4; }
+.message-me { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+.message-other { align-self: flex-start; background: rgba(255,255,255,0.1); color: white; border-bottom-left-radius: 4px; }
+
+/* ===== ADDITIONAL FIXES ===== */
+.v-item { cursor: pointer; transition: background 0.2s; }
+.v-item:active { background: rgba(255,255,255,0.15); }
+.pill { cursor: pointer; transition: all 0.2s; }
+.pill:active { transform: scale(0.95); }
+.ctrl-btn:active { transform: scale(0.9); }
+#btnSubscribe svg { transition: fill 0.3s; }
+
+/* REBUILD UI FIXES */
+.search-header-container { padding-top: 20px; }
+.search-header-container h1 { margin-bottom: 8px; }
+.search-box-wrapper { margin-top: 8px; }
+
+/* PROFILE PHOTO FIX */
+#editProfileAvatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+
+/* FOOTER SAFE AREA */
+.bottom-nav { z-index: 1000; }
+.mini-player { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 900; }
+#chatInput { max-height: 120px; }
+
+/* REBUILD APK SIZE OPTIMIZATION (UI-wise) */
+img { content-visibility: auto; }
+.view-section { contain: content; }
 .nav-item { color: var(--text-sub); font-size: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 60px; padding-bottom: 2px; }
 .nav-item.active { color: var(--accent); }
 .nav-item svg { width: 22px; height: 22px; fill: currentColor; }

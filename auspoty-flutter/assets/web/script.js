@@ -139,6 +139,8 @@ function playMusic(videoId, encodedData) {
     // Reset downloaded mode saat main lagu streaming
     window._localAudioPlaying = false;
     window._isDownloadedView = false;
+    // Pastikan icon di daftar unduhan kembali ke "play"
+    _refreshDownloadedIcons(false);
 
     if (!songHistory.length || songHistory[songHistory.length-1].videoId !== currentTrack.videoId) {
         songHistory.push(Object.assign({}, currentTrack));
@@ -201,7 +203,7 @@ function playMusic(videoId, encodedData) {
 // TOGGLE PLAY
 function togglePlay() {
     // Check if playing local offline audio
-    if (window._localAudioPlaying || window._isDownloadedView) {
+    if (window._localAudioPlaying) {
         if (window.flutter_inappwebview) {
             try { window.flutter_inappwebview.callHandler('toggleLocalPlay'); } catch(e) {}
         }
@@ -226,8 +228,9 @@ function updatePlayPauseBtn(playing) {
     const mainBtn = document.getElementById('mainPlayBtn'), miniBtn = document.getElementById('miniPlayBtn');
     if (mainBtn) mainBtn.innerHTML = '<path d="' + (playing ? pausePath : playPath) + '"/>';
     if (miniBtn) miniBtn.innerHTML = '<path d="' + (playing ? pausePath : playPath) + '"/>';
-    // Refresh icon di daftar lagu diunduh
-    if (window._isDownloadedView) _refreshDownloadedIcons();
+    // Refresh icon di daftar lagu diunduh — jangan tergantung view flag
+    // (user bisa toggle play dari mini player walau sudah pindah view)
+    _refreshDownloadedIcons(playing);
 }
 
 function expandPlayer() { document.getElementById('playerModal').style.display = 'flex'; }
@@ -509,6 +512,11 @@ function playDownloadedSong(videoId, title, artist, img) {
     try { if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch(e) {}
     window._localAudioPlaying = true;
     isPlaying = true;
+    // Pastikan daftar unduhan ikut update icon saat mode offline dipakai
+    // meskipun user memulai playback dari view selain "Lagu Diunduh".
+    if (window._playlistTracks && Array.isArray(window._playlistTracks)) {
+        window._isDownloadedView = true;
+    }
     currentTrack = { videoId: videoId, title: title, artist: artist, img: img };
     window.currentTrack = currentTrack;
     // Set index di _playlistTracks supaya next/prev bisa jalan
@@ -563,6 +571,7 @@ function playNextDownloadedSong() {
     const tracks = window._playlistTracks;
     let idx = (window._downloadedQueueIndex !== undefined) ? window._downloadedQueueIndex : -1;
     idx = (idx + 1) % tracks.length;
+    window._downloadedQueueIndex = idx;
     const t = tracks[idx];
     if (t) playDownloadedSong(t.videoId, t.title || '', t.artist || '', getHighResImage(t.thumbnail || t.img || ''));
 }
@@ -572,6 +581,7 @@ function playPrevDownloadedSong() {
     const tracks = window._playlistTracks;
     let idx = (window._downloadedQueueIndex !== undefined) ? window._downloadedQueueIndex : 0;
     idx = (idx - 1 + tracks.length) % tracks.length;
+    window._downloadedQueueIndex = idx;
     const t = tracks[idx];
     if (t) playDownloadedSong(t.videoId, t.title || '', t.artist || '', getHighResImage(t.thumbnail || t.img || ''));
 }
@@ -606,26 +616,30 @@ function renderDownloadedVItem(t) {
 
 // Toggle play/pause untuk item di daftar unduhan
 function _dlToggle(vid, ttl, art, img) {
-    if (window.currentTrack && window.currentTrack.videoId === vid) {
+    if (window.currentTrack && window.currentTrack.videoId === vid && window._localAudioPlaying) {
         // Lagu ini sedang aktif — toggle play/pause
         togglePlay();
     } else {
-        // Lagu berbeda — play lagu ini
+        // Lagu berbeda atau belum diputar — play lagu ini
         playDownloadedSong(vid, ttl, art, img);
     }
 }
 
 // Update semua icon di daftar unduhan setelah state berubah
-function _refreshDownloadedIcons() {
-    if (!window._playlistTracks || !window._isDownloadedView) return;
+function _refreshDownloadedIcons(nowPlaying) {
+    if (!window._playlistTracks) return;
+    // Gunakan parameter nowPlaying jika ada, fallback ke global isPlaying
+    var playing = (nowPlaying !== undefined) ? nowPlaying : isPlaying;
     var playPath = 'M8 5v14l11-7z', pausePath = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
     window._playlistTracks.forEach(function(t) {
         var el = document.getElementById('dl-playbtn-' + t.videoId);
         if (!el) return;
         var isActive = window.currentTrack && window.currentTrack.videoId === t.videoId;
-        var isNowPlaying = isActive && window._localAudioPlaying && isPlaying;
+        // isNowPlaying: lagu ini aktif DAN sedang playing (cek isPlaying, bukan _localAudioPlaying)
+        var isNowPlaying = isActive && playing;
         el.style.fill = isActive ? 'var(--accent)' : 'rgba(255,255,255,0.5)';
-        el.querySelector('path').setAttribute('d', isNowPlaying ? pausePath : playPath);
+        var pathEl = el.querySelector('path');
+        if (pathEl) pathEl.setAttribute('d', isNowPlaying ? pausePath : playPath);
     });
 }
 function renderHCard(t) {
@@ -841,6 +855,26 @@ function switchSearchTab(tab) {
     }
 }
 
+// =========================
+// USER CACHE (for performance)
+// =========================
+let _usersCache = null;
+let _usersCacheLoaded = false;
+async function _ensureUsersCache() {
+    if (_usersCacheLoaded && Array.isArray(_usersCache)) return _usersCache;
+    try {
+        const db_fs = window._firestoreDB;
+        if (!db_fs) return [];
+        const snap = await window._fsGetDocs(window._fsCollection(db_fs, 'users'));
+        _usersCache = snap.docs.map(d => d.data()).filter(u => !!u && !!u.email);
+        _usersCacheLoaded = true;
+    } catch (e) {
+        _usersCache = [];
+        _usersCacheLoaded = false;
+    }
+    return _usersCache || [];
+}
+
 async function doUserSearch(q) {
     document.getElementById('searchCategoriesUI').style.display = 'none';
     document.getElementById('searchResultsUI').style.display = 'none';
@@ -848,20 +882,17 @@ async function doUserSearch(q) {
     const el = document.getElementById('userSearchResults');
     el.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Mencari pengguna...</div>';
     try {
-        const db_fs = window._firestoreDB;
-        if (!db_fs) return;
-        // Firestore doesn't support full-text search easily without Algolia, 
-        // but we can do a simple prefix search if name is stored lowercased or just fetch all and filter for now
-        // For this app, let's fetch all users from a 'users' collection or search in comments for now.
-        // Actually, a better way is to have a 'users' collection.
-        const snap = await window._fsGetDocs(window._fsCollection(db_fs, 'users'));
-        const users = snap.docs.map(doc => doc.data()).filter(u => 
-            u.name.toLowerCase().includes(q.toLowerCase()) || 
-            u.email.toLowerCase().includes(q.toLowerCase())
+        const users = await _ensureUsersCache();
+        const ql = (q || '').toLowerCase();
+        const usersFiltered = users.filter(u => 
+            (u.name || '').toLowerCase().includes(ql) ||
+            (u.email || '').toLowerCase().includes(ql)
         );
         
-        if (users.length > 0) {
-            el.innerHTML = users.map(u => 
+        // Limit to reduce UI jank on large datasets
+        const usersTop = usersFiltered.slice(0, 40);
+        if (usersTop.length > 0) {
+            el.innerHTML = usersTop.map(u => 
                 '<div class="v-item" onclick="viewUserProfile(\'' + u.email + '\')">' +
                 '<div style="width:48px;height:48px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;overflow:hidden;flex-shrink:0;">' + 
                 (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : u.name.charAt(0).toUpperCase()) + '</div>' +
@@ -916,28 +947,53 @@ async function toggleFollowUser() {
     
     try {
         const db_fs = window._firestoreDB;
-        // 1. Update target user's followers
-        const targetRef = window._fsDoc(db_fs, 'users', targetUser.email); // Assume email is doc ID
-        let followers = targetUser.followers || [];
+        if (!db_fs) return;
+
+        // Resolve doc refs from query (don't assume docId == email)
+        const qTarget = window._fsQuery(
+            window._fsCollection(db_fs, 'users'),
+            window._fsWhere('email', '==', targetUser.email)
+        );
+        const qCurrent = window._fsQuery(
+            window._fsCollection(db_fs, 'users'),
+            window._fsWhere('email', '==', currentUser.email)
+        );
+
+        const [snapTarget, snapCurrent] = await Promise.all([
+            window._fsGetDocs(qTarget),
+            window._fsGetDocs(qCurrent)
+        ]);
+
+        if (snapTarget.empty || snapCurrent.empty) {
+            showToast('User tidak ditemukan di database');
+            return;
+        }
+
+        const targetDoc = snapTarget.docs[0];
+        const currentDoc = snapCurrent.docs[0];
+
+        // 1) Update target user's followers
+        let followers = targetDoc.data().followers || [];
         if (followers.includes(currentUser.email)) {
             followers = followers.filter(e => e !== currentUser.email);
         } else {
             followers.push(currentUser.email);
         }
-        await window._fsSetDoc(targetRef, { followers: followers }, { merge: true });
-        
-        // 2. Update current user's following
-        const currentRef = window._fsDoc(db_fs, 'users', currentUser.email);
-        const currentSnap = await window._fsGetDoc(currentRef);
-        let following = [];
-        if (currentSnap.exists()) following = currentSnap.data().following || [];
+        await window._fsSetDoc(targetDoc.ref, { followers: followers }, { merge: true });
+
+        // 2) Update current user's following
+        let following = currentDoc.data().following || [];
         if (following.includes(targetUser.email)) {
             following = following.filter(e => e !== targetUser.email);
         } else {
             following.push(targetUser.email);
         }
-        await window._fsSetDoc(currentRef, { following: following }, { merge: true });
-        
+        await window._fsSetDoc(currentDoc.ref, { following: following }, { merge: true });
+
+        // refresh cache for future searches (avoid stale data confusion)
+        _usersCacheLoaded = false;
+        _usersCache = null;
+
         viewUserProfile(targetUser.email);
     } catch(e) { showToast('Gagal mengikuti'); }
 }
@@ -1318,6 +1374,11 @@ function triggerPhotoUpload() {
 }
 function applyProfilePhoto(base64) {
     localStorage.setItem('auspotyProfilePhoto', base64);
+    // Update avatar di modal edit profil juga (biar langsung kelihatan)
+    const av = document.getElementById('editProfileAvatar');
+    if (av && base64) {
+        av.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+    }
     updateProfileUI();
     showToast('Foto profil diperbarui!');
 }
@@ -1745,79 +1806,16 @@ async function syncUserProfile() {
     } catch(e) { console.error('syncUserProfile:', e); }
 }
 
-// Lihat profil pengguna lain
-async function viewUserProfile(email) {
-    if (!email) return;
-    const modal = document.getElementById('userProfileModal');
-    const content = document.getElementById('userProfileContent');
-    modal.style.display = 'flex';
-    content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-sub);">Memuat...</div>';
-    try {
-        const db = window._firestoreDB;
-        const snap = await window._fsGetDoc(window._fsDoc(db, 'users', email));
-        const me = getGoogleUser();
-        const myEmail = me ? me.email : '';
-
-        let userData = snap.exists() ? snap.data() : { email, name: email.split('@')[0], picture: '' };
-
-        // Cek apakah sudah follow
-        let isFollowing = false;
-        if (myEmail && myEmail !== email) {
-            const followSnap = await window._fsGetDoc(window._fsDoc(db, 'follows', myEmail + '_' + email));
-            isFollowing = followSnap.exists();
-        }
-
-        // Hitung followers
-        const followersSnap = await window._fsGetDocs(window._fsQuery(window._fsCollection(db, 'follows'), window._fsWhere('to', '==', email)));
-        const followCount = followersSnap.size;
-
-        const pic = userData.picture;
-        const name = userData.name || email;
-        const isSelf = myEmail === email;
-
-        content.innerHTML =
-            '<div style="text-align:center;margin-bottom:20px;">' +
-            '<div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));margin:0 auto 12px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:#fff;">' +
-            (pic ? '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;">' : name.charAt(0).toUpperCase()) +
-            '</div>' +
-            '<div style="font-size:18px;font-weight:700;color:white;">' + name + '</div>' +
-            '<div style="font-size:12px;color:var(--text-sub);margin-top:4px;">' + followCount + ' pengikut</div>' +
-            '</div>' +
-            (!isSelf && myEmail ?
-                '<div style="display:flex;gap:10px;justify-content:center;">' +
-                '<button id="followBtn" onclick="toggleFollow(\'' + email + '\')" style="background:' + (isFollowing ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg,var(--accent),var(--accent2))') + ';border:none;border-radius:20px;padding:10px 24px;color:white;font-weight:700;cursor:pointer;">' + (isFollowing ? 'Berhenti Ikuti' : 'Ikuti') + '</button>' +
-                '<button onclick="openDM(\'' + email + '\',\'' + name + '\')" style="background:rgba(255,255,255,0.1);border:none;border-radius:20px;padding:10px 24px;color:white;font-weight:700;cursor:pointer;">💬 Pesan</button>' +
-                '</div>'
-                : '') +
-            '<div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);font-size:13px;color:var(--text-sub);text-align:center;">Pengguna Auspoty</div>';
-    } catch(e) {
-        content.innerHTML = '<div style="color:#ff5252;text-align:center;padding:20px;">Gagal memuat profil</div>';
-    }
-}
-
+// Lihat profil pengguna lain — gunakan view user-profile yang sudah ada
+// (fungsi viewUserProfile sudah didefinisikan di atas, ini hanya alias)
 function closeUserProfile() {
     document.getElementById('userProfileModal').style.display = 'none';
 }
 
-// Follow / Unfollow
+// Follow / Unfollow (versi modal — alias ke toggleFollowUser)
 async function toggleFollow(targetEmail) {
-    const me = getGoogleUser();
-    if (!me) { showToast('Login dulu untuk follow'); return; }
-    const db = window._firestoreDB;
-    const followId = me.email + '_' + targetEmail;
-    const ref = window._fsDoc(db, 'follows', followId);
-    try {
-        const snap = await window._fsGetDoc(ref);
-        if (snap.exists()) {
-            await window._fsDeleteDoc(ref);
-            showToast('Berhenti mengikuti');
-        } else {
-            await window._fsSetDoc(ref, { from: me.email, to: targetEmail, createdAt: window._fsTimestamp() });
-            showToast('Mengikuti ' + targetEmail.split('@')[0]);
-        }
-        // Refresh profil
-        viewUserProfile(targetEmail);
-    } catch(e) { showToast('Gagal: ' + e.message); }
+    window._viewingUser = window._viewingUser || { email: targetEmail };
+    await toggleFollowUser();
 }
 
 // Cari pengguna
@@ -1834,10 +1832,11 @@ async function searchUsers() {
     if (!q) { results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Masukkan nama untuk dicari</div>'; return; }
     results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Mencari...</div>';
     try {
-        const snap = await window._fsGetDocs(window._fsCollection(window._firestoreDB, 'users'));
-        const users = snap.docs.map(d => d.data()).filter(u => u.name && u.name.toLowerCase().includes(q));
-        if (!users.length) { results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Tidak ada pengguna ditemukan</div>'; return; }
-        results.innerHTML = users.map(u =>
+        const users = await _ensureUsersCache();
+        const usersFiltered = users.filter(u => u.name && u.name.toLowerCase().includes(q));
+        const usersTop = usersFiltered.slice(0, 40);
+        if (!usersTop.length) { results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Tidak ada pengguna ditemukan</div>'; return; }
+        results.innerHTML = usersTop.map(u =>
             '<div onclick="viewUserProfile(\'' + u.email + '\')" style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:rgba(255,255,255,0.05);margin-bottom:8px;cursor:pointer;">' +
             '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;overflow:hidden;flex-shrink:0;">' +
             (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : u.name.charAt(0).toUpperCase()) +

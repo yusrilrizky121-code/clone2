@@ -136,7 +136,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             _localPlaying = false;
             try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
             await _wvc?.evaluateJavascript(source:
-              "(function(){isPlaying=false;window._localAudioPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
+              "(function(){isPlaying=false;window._localAudioPlaying=true;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
           } else {
             await _localPlayer.play();
             _localPlaying = true;
@@ -150,13 +150,27 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         }
         break;
       case 'onNext':
-        _stopLocalPlayer();
-        await _wvc?.evaluateJavascript(
-            source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
+        // Jika sedang memutar file offline (downloaded), next harus ikut antrean downloaded.
+        _stopLocalPlayer(injectJs: false);
+        await _wvc?.evaluateJavascript(source: r"""
+          (function(){
+            try{
+              if(window._isDownloadedView && typeof playNextDownloadedSong==='function') playNextDownloadedSong();
+              else if(typeof playNextSimilarSong==='function') playNextSimilarSong();
+            }catch(e){}
+          })();
+        """);
         break;
       case 'onPrev':
-        await _wvc?.evaluateJavascript(
-            source: "if(typeof playPrevSong==='function') playPrevSong();");
+        _stopLocalPlayer(injectJs: false);
+        await _wvc?.evaluateJavascript(source: r"""
+          (function(){
+            try{
+              if(window._isDownloadedView && typeof playPrevDownloadedSong==='function') playPrevDownloadedSong();
+              else if(typeof playPrevSong==='function') playPrevSong();
+            }catch(e){}
+          })();
+        """);
         break;
     }
   }
@@ -1316,6 +1330,22 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         window._onNativePlaybackPaused=function(){window._nativePlaying=false;window._nativePaused=true;isPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);};
         window._updateNativeProgress=function(pos,dur){if(dur<=0)return;var pct=(pos/dur)*100;var bar=document.getElementById('progressBar');if(bar){bar.value=pct;bar.style.background='linear-gradient(to right, white '+pct+'%, rgba(255,255,255,0.2) '+pct+'%)';}var fmt=function(s){var m=Math.floor(s/60),sec=s%60;return m+':'+(sec<10?'0':'')+sec;};var ct=document.getElementById('currentTime');if(ct)ct.innerText=fmt(pos);var tt=document.getElementById('totalTime');if(tt)tt.innerText=fmt(dur);};
         window._fmtTime=function(s){var m=Math.floor(s/60),sec=s%60;return m+':'+(sec<10?'0':'')+sec;};
+
+        // Fallback untuk halaman web yang belum punya handler foto profil.
+        // Dart akan memanggil applyProfilePhoto(dataUrl) setelah user pilih gambar.
+        if(typeof window.applyProfilePhoto!=='function'){
+          window.applyProfilePhoto=function(base64){
+            try{
+              if(base64) localStorage.setItem('auspotyProfilePhoto', base64);
+              // Update beberapa elemen umum jika ada
+              var av=document.getElementById('editProfileAvatar');
+              if(av && base64) av.innerHTML='<img src=\"'+base64+'\" style=\"width:100%;height:100%;border-radius:50%;object-fit:cover;\">';
+              if(typeof updateProfileUI==='function') updateProfileUI();
+              if(typeof showToast==='function') showToast('Foto profil diperbarui!');
+            }catch(e){}
+          };
+        }
+
         console.log('[Auspoty] Bridge ready');
       })();
     """);

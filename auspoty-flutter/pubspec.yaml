@@ -20,8 +20,8 @@ dependencies:
   workmanager: ^0.6.0
   image_picker: ^1.1.2
   open_filex: ^4.3.4
-  # Pin package_info_plus ke versi yang kompatibel dengan Kotlin 1.8.x
-  package_info_plus: ^8.0.0
+  # Pin package_info_plus ke versi yang kompatibel dengan Kotlin 1.9.x
+  package_info_plus: ">=8.0.0 <9.0.0"
 
 dev_dependencies:
   flutter_test:
