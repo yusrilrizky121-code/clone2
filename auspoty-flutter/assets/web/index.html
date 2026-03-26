@@ -686,6 +686,10 @@
         <div id="commentTrackName" style="font-size:12px;color:var(--text-sub);margin-bottom:16px;"></div>
         <div id="commentsList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:8px;"></div>
         <div id="commentInputArea" style="margin-top:12px;display:none;">
+            <div id="replyBanner" style="display:none;background:rgba(167,139,250,0.1);border-radius:8px;padding:6px 12px;margin-bottom:8px;display:none;align-items:center;justify-content:space-between;">
+                <span id="replyBannerText" style="font-size:12px;color:var(--accent);">Membalas...</span>
+                <span onclick="cancelReply()" style="font-size:18px;color:var(--text-sub);cursor:pointer;line-height:1;">✕</span>
+            </div>
             <div style="display:flex;gap:10px;align-items:flex-end;">
                 <textarea id="commentInput" placeholder="Tulis komentar..." style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:10px 14px;color:white;font-size:14px;outline:none;resize:none;height:44px;font-family:inherit;"></textarea>
                 <button onclick="submitComment()" style="background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;padding:10px 16px;color:white;font-weight:700;cursor:pointer;font-size:14px;height:44px;white-space:nowrap;">Kirim</button>

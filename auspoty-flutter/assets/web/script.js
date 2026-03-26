@@ -1432,6 +1432,9 @@ function downloadMusic() {
 // GOOGLE AUTH
 function getGoogleUser() { try { return JSON.parse(localStorage.getItem('auspotyGoogleUser') || 'null'); } catch(e) { return null; } }
 function loginWithGoogle() {
+    if (window.flutter_inappwebview) {
+        try { window.flutter_inappwebview.callHandler('openGoogleLogin'); return; } catch(e) {}
+    }
     if (window.AndroidBridge && typeof window.AndroidBridge.openGoogleLogin === 'function') window.AndroidBridge.openGoogleLogin();
     else if (typeof window._firebaseSignIn === 'function') window._firebaseSignIn();
     else showToast('Login Google belum tersedia');
@@ -1549,7 +1552,17 @@ function replyToComment(id, name) {
     const input = document.getElementById('commentInput');
     input.placeholder = 'Membalas ' + name + '...';
     input.focus();
-    showToast('Membalas ' + name);
+    const banner = document.getElementById('replyBanner');
+    const bannerText = document.getElementById('replyBannerText');
+    if (banner) { banner.style.display = 'flex'; }
+    if (bannerText) bannerText.innerText = 'Membalas ' + name;
+}
+function cancelReply() {
+    _replyingTo = null;
+    const input = document.getElementById('commentInput');
+    if (input) input.placeholder = 'Tulis komentar...';
+    const banner = document.getElementById('replyBanner');
+    if (banner) banner.style.display = 'none';
 }
 
 async function deleteComment(id) {
@@ -1598,6 +1611,8 @@ async function submitComment() {
             commentData.parentId = _replyingTo.id;
             _replyingTo = null;
             input.placeholder = 'Tulis komentar...';
+            const banner = document.getElementById('replyBanner');
+            if (banner) banner.style.display = 'none';
         }
         await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'comments'), commentData);
         input.value = ''; showToast('Komentar terkirim!'); loadComments(currentTrack.videoId);
