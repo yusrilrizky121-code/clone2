@@ -959,7 +959,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF0a0a0f),
-        resizeToAvoidBottomInset: true,
+        resizeToAvoidBottomInset: false,
         body: SafeArea(
           top: true, bottom: true,
           child: Stack(children: [

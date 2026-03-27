@@ -60,29 +60,24 @@ img {
     /* NO contain — causes repaint/compositing issues on Android WebView */
 }
 /* Chat view butuh flex */
-#view-chat.active { display: flex; flex-direction: column; }
-/* Chat view: isi penuh, input di bawah */
-#view-chat.active {
-    height: 100%;
-    max-height: 100vh;
-    overflow: hidden;
-    position: relative;
+#view-chat.active { display: block; }
+#view-chat {
+    background: var(--bg-base);
 }
 #chatMessages {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-    -webkit-overflow-scrolling: touch;
+    padding: 12px 16px 140px;
     display: flex;
     flex-direction: column;
-    padding: 12px 16px;
     gap: 8px;
 }
 #chatInputBar {
-    flex-shrink: 0;
+    position: fixed;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    left: 0; right: 0;
     background: var(--bg-main);
     border-top: 1px solid rgba(255,255,255,0.06);
-    padding: 8px 12px 8px;
+    padding: 8px 12px;
+    z-index: 500;
 }
 
 /* ===== TOUCH — no 300ms delay on all tappables ===== */
