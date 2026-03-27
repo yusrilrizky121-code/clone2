@@ -100,6 +100,8 @@
         } catch(e) {}
       };
       onAuthStateChanged(auth, (user) => {
+        // Clear init timeout jika Firebase sudah respond
+        if (window._authInitTimeout) { clearTimeout(window._authInitTimeout); window._authInitTimeout = null; }
         if (user) {
           const userData = {
             name: user.displayName || 'Pengguna Google',
@@ -114,14 +116,10 @@
           if (typeof _hideAuthScreen === 'function') _hideAuthScreen();
           if (typeof loadHomeData === 'function' && !window._homeLoaded) { window._homeLoaded = true; loadHomeData(); }
         } else {
-          // user = null dari Firebase — JANGAN hapus localStorage
-          // karena user mungkin login via email/password Firestore (bukan Firebase Auth)
-          // Hanya tampilkan auth screen kalau memang belum ada data login sama sekali
-          if (!window._manualAuth) {
-            const existing = localStorage.getItem('auspotyGoogleUser');
-            if (!existing) {
-              if (typeof _showAuthScreen === 'function') _showAuthScreen();
-            }
+          // Firebase tidak punya session
+          const existing = localStorage.getItem('auspotyGoogleUser');
+          if (!existing && !window._manualAuth) {
+            if (typeof _showAuthScreen === 'function') _showAuthScreen();
           }
         }
       });

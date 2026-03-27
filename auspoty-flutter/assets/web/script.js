@@ -1890,8 +1890,20 @@ function _updateWaveform(pct) {
 
 document.addEventListener('DOMContentLoaded', function() {
     applyAllSettings(); renderSearchCategories();
-    // Cek auth state — tampilkan login screen jika belum login
-    _checkAuthAndInit();
+    // Delay kecil agar Firebase onAuthStateChanged sempat jalan dulu
+    // Jika ada user di localStorage, langsung masuk. Jika tidak, tunggu Firebase.
+    const existingUser = localStorage.getItem('auspotyGoogleUser');
+    if (existingUser) {
+        // Sudah ada data login — langsung masuk tanpa tunggu Firebase
+        _checkAuthAndInit();
+    } else {
+        // Belum ada — tunggu Firebase onAuthStateChanged (max 2 detik)
+        var _authTimeout = setTimeout(function() {
+            // Firebase tidak respond dalam 2 detik — tampilkan auth screen
+            if (!getGoogleUser()) _showAuthScreen();
+        }, 2000);
+        window._authInitTimeout = _authTimeout;
+    }
 });
 
 // ============================================================
@@ -2089,16 +2101,30 @@ function doGoogleAuth() {
 }
 
 // Override logoutFromGoogle agar kembali ke auth screen
-const _origLogout = typeof logoutFromGoogle === 'function' ? logoutFromGoogle : null;
+// Override logoutFromGoogle — clear semua data dan tampilkan auth screen
 window.logoutFromGoogle = function() {
-    if (_origLogout) _origLogout();
-    else {
-        if (typeof window._firebaseSignOut === 'function') window._firebaseSignOut();
-        else localStorage.removeItem('auspotyGoogleUser');
+    // Clear semua data login
+    localStorage.removeItem('auspotyGoogleUser');
+    localStorage.removeItem('auspotyProfilePhoto');
+    window._manualAuth = false;
+    window._homeLoaded = false;
+    // Stop semua polling
+    if (typeof _onlineStatusInterval !== 'undefined' && _onlineStatusInterval) {
+        clearInterval(_onlineStatusInterval); _onlineStatusInterval = null;
     }
-    setTimeout(() => {
-        if (!getGoogleUser()) _showAuthScreen();
-    }, 500);
+    if (typeof _msgNotifInterval !== 'undefined' && _msgNotifInterval) {
+        clearInterval(_msgNotifInterval); _msgNotifInterval = null;
+    }
+    if (typeof _chatInterval !== 'undefined' && _chatInterval) {
+        clearInterval(_chatInterval); _chatInterval = null;
+    }
+    // Firebase sign out (tidak blocking)
+    if (typeof window._firebaseSignOut === 'function') {
+        window._firebaseSignOut().catch(() => {});
+    }
+    // Tampilkan auth screen langsung
+    _showAuthScreen();
+    showToast('Berhasil keluar');
 };
 
 
