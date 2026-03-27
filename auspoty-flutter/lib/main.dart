@@ -620,6 +620,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       final endpoints = [
         'https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471',
         'https://d.ymcdn.org/api/v1/init?p=y&23=1llum1n471',
+        'https://b.ymcdn.org/api/v1/init?p=y&23=1llum1n471',
       ];
 
       for (final baseEndpoint in endpoints) {
@@ -671,11 +672,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             }
           }
 
-          if (downloadUrl.isNotEmpty) break; // berhasil
+          if (downloadUrl.isNotEmpty) break;
         } catch (_) { continue; }
       }
 
-      if (downloadUrl.isEmpty) throw Exception('Gagal mendapatkan URL download');
+      if (downloadUrl.isEmpty) throw Exception('Gagal mendapatkan URL download dari ytmp3.mobi');
 
       _wvc?.evaluateJavascript(source: "if(typeof showToast==='function') showToast('⬇️ Mengunduh...');");
 
@@ -692,19 +693,40 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         throw Exception('Download HTTP ${streamedRes.statusCode}');
       }
 
-      // Simpan ke penyimpanan internal app (bisa diakses oleh player)
-      final appDir = await getApplicationDocumentsDirectory();
-      // Bersihkan nama file
-      final safeFilename = videoId.replaceAll(RegExp(r'[^\w]'), '_');
-      final f = File('${appDir.path}/$safeFilename.mp3');
-      final sink = f.openWrite();
-      await streamedRes.stream.pipe(sink);
-      await sink.close();
+      // Baca semua bytes dulu
+      final bytes = await streamedRes.stream.toBytes();
       client.close();
 
-      if (!await f.exists() || await f.length() < 1000) {
-        throw Exception('File gagal tersimpan');
-      }
+      if (bytes.length < 1000) throw Exception('File terlalu kecil, mungkin gagal');
+
+      final safeFilename = videoId.replaceAll(RegExp(r'[^\w]'), '_');
+
+      // ── LOKASI 1: App documents (untuk diputar di dalam app) ──────────────
+      final appDir = await getApplicationDocumentsDirectory();
+      final appFile = File('${appDir.path}/$safeFilename.mp3');
+      await appFile.writeAsBytes(bytes);
+
+      // ── LOKASI 2: Folder Auspoty di penyimpanan eksternal ─────────────────
+      String? externalPath;
+      try {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          // Naik ke root storage, buat folder Auspoty/Music
+          // extDir biasanya: /storage/emulated/0/Android/data/com.auspoty.app/files
+          // Kita mau: /storage/emulated/0/Auspoty
+          final parts = extDir.path.split('/');
+          // Cari index 'emulated' atau ambil sampai /storage/emulated/0
+          int rootIdx = parts.indexOf('Android');
+          if (rootIdx > 0) {
+            final rootPath = parts.sublist(0, rootIdx).join('/');
+            final auspotyDir = Directory('$rootPath/Auspoty');
+            if (!await auspotyDir.exists()) await auspotyDir.create(recursive: true);
+            final extFile = File('${auspotyDir.path}/$safeFilename.mp3');
+            await extFile.writeAsBytes(bytes);
+            externalPath = extFile.path;
+          }
+        }
+      } catch (_) { /* external storage tidak tersedia */ }
 
       // Ambil artist+img dari WebView jika kosong
       String resolvedArtist = artist;
@@ -729,7 +751,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         'title': apiTitle,
         'artist': resolvedArtist,
         'img': resolvedImg,
-        'path': f.path,
+        'path': appFile.path,
+        'externalPath': externalPath ?? '',
       };
       await prefs.setString('downloadedFiles', json.encode(fileMap));
 
@@ -738,16 +761,17 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       final safeArtist = resolvedArtist.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
       final safeImg = resolvedImg.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
       final shortTitle = apiTitle.length > 30 ? apiTitle.substring(0, 30) : apiTitle;
+      final extMsg = externalPath != null ? ' & folder Auspoty' : '';
       await _wvc?.evaluateJavascript(source: """
         (function(){
           var track={videoId:'$videoId',title:'$safeTitle',artist:'$safeArtist',img:'$safeImg'};
           if(typeof saveDownloadedSong==='function') saveDownloadedSong(track);
-          if(typeof showToast==='function') showToast('✓ Tersimpan: ${shortTitle.replaceAll("'", "\\'")}');
+          if(typeof showToast==='function') showToast('✓ Tersimpan di koleksi$extMsg: ${shortTitle.replaceAll("'", "\\'")}');
         })();
       """);
     } catch (e) {
       final msg = e.toString();
-      final short = msg.length > 60 ? msg.substring(0, 60) : msg;
+      final short = msg.length > 70 ? msg.substring(0, 70) : msg;
       _wvc?.evaluateJavascript(source: "if(typeof showToast==='function') showToast('Download gagal: ${short.replaceAll("'", "\\'")}');");
     }
   }
