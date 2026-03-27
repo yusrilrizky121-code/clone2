@@ -469,7 +469,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     // Progress timer dari Dart → inject ke WebView setiap 500ms
     _localProgressTimer?.cancel();
     _localProgressTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
-      if (!_localPlaying) return;
+      // Cek dari player langsung, bukan dari _localPlaying flag
       final pos = _localPlayer.position.inMilliseconds;
       final dur = _localPlayer.duration?.inMilliseconds ?? 0;
       if (dur <= 0) return;
@@ -480,10 +480,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       try {
         await _wvc?.evaluateJavascript(source: """
           (function(){
-            if(!window._localAudioPlaying) return;
             var pct=${pct.toStringAsFixed(1)};
             var bar=document.getElementById('progressBar');
-            if(bar){bar.value=pct;}
+            if(bar) bar.value=pct;
             var pf=document.getElementById('progressFill');if(pf)pf.style.width=pct+'%';
             var mf=document.getElementById('miniProgressFill');if(mf)mf.style.width=pct+'%';
             var ct=document.getElementById('currentTime');if(ct)ct.innerText='${fmt(posSec)}';

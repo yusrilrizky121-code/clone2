@@ -244,38 +244,30 @@ function startProgressBar() {
     var _ct   = document.getElementById('currentTime');
     var _tt   = document.getElementById('totalTime');
     var _lastPct = -1;
-    var _rafId = null;
-    var _lastTick = 0;
-    var _active = true;
 
-    function _tick(now) {
-        if (!_active) return;
-        _rafId = requestAnimationFrame(_tick);
-        if (now - _lastTick < 950) return;
-        _lastTick = now;
-        // Saat mode offline, progress diupdate dari Dart — skip
+    var _intervalId = setInterval(function() {
+        // Mode offline: progress diupdate dari Dart timer — skip di sini
         if (window._localAudioPlaying) return;
-        if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+        if (!ytPlayer) return;
         var cur = 0, dur = 0;
         try {
+            if (typeof ytPlayer.getCurrentTime !== 'function') return;
             cur = ytPlayer.getCurrentTime() || 0;
-            dur = ytPlayer.getDuration ? (ytPlayer.getDuration() || 0) : 0;
+            dur = (typeof ytPlayer.getDuration === 'function') ? (ytPlayer.getDuration() || 0) : 0;
         } catch(e) { return; }
         if (dur <= 0) return;
-        var pct = (cur / dur) * 100;
-        if (Math.abs(pct - _lastPct) < 0.1) return;
+        var pct = Math.min((cur / dur) * 100, 100);
+        if (Math.abs(pct - _lastPct) < 0.05) return;
         _lastPct = pct;
         var pctStr = pct.toFixed(1) + '%';
-        if (_bar)  { _bar.value = pct; }
+        if (_bar)  _bar.value = pct;
         if (_fill) _fill.style.width = pctStr;
         if (_mf)   _mf.style.width   = pctStr;
         if (_ct) _ct.innerText = formatTime(cur);
         if (_tt) _tt.innerText = formatTime(dur);
-    }
-    _rafId = requestAnimationFrame(_tick);
-    progressInterval = {
-        cancel: function() { _active = false; if (_rafId) cancelAnimationFrame(_rafId); _rafId = null; }
-    };
+    }, 500);
+
+    progressInterval = { cancel: function() { clearInterval(_intervalId); } };
 }
 function stopProgressBar() {
     if (progressInterval && progressInterval.cancel) {
@@ -915,7 +907,6 @@ async function viewUserProfile(email) {
     
     switchView('user-profile');
     
-    // Set loading state
     const nameEl = document.getElementById('upvName');
     const emailEl = document.getElementById('upvEmail');
     const avatarEl = document.getElementById('upvAvatar');
@@ -927,51 +918,53 @@ async function viewUserProfile(email) {
     
     if (nameEl) nameEl.innerText = 'Memuat...';
     if (emailEl) emailEl.innerText = email;
-    if (avatarEl) { avatarEl.innerHTML = ''; avatarEl.innerText = '?'; }
+    if (avatarEl) { avatarEl.innerHTML = ''; avatarEl.innerText = email.charAt(0).toUpperCase(); }
     if (followersEl) followersEl.innerText = '0';
     if (followingEl) followingEl.innerText = '0';
-    if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Memuat aktivitas...</div>';
+    if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Memuat...</div>';
     if (btnFollow) btnFollow.style.display = 'none';
     if (btnMsg) btnMsg.style.display = 'none';
     
-    // Tunggu Firestore siap
-    let retries = 0;
-    while (!window._firestoreDB && retries < 10) {
+    // Tunggu Firestore siap max 3 detik
+    for (let i = 0; i < 10 && !window._firestoreDB; i++) {
         await new Promise(r => setTimeout(r, 300));
-        retries++;
     }
     
-    if (!window._firestoreDB) {
+    const db_fs = window._firestoreDB;
+    if (!db_fs) {
         if (nameEl) nameEl.innerText = email.split('@')[0];
-        if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Firestore belum siap, coba lagi.</div>';
+        if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas.</div>';
         window._viewingUser = { email, name: email.split('@')[0] };
         return;
     }
     
     try {
-        const db_fs = window._firestoreDB;
-        const q = window._fsQuery(window._fsCollection(db_fs, 'users'), window._fsWhere('email', '==', email));
-        const snap = await window._fsGetDocs(q);
+        // Coba getDoc langsung (email = doc ID) — lebih cepat, tidak butuh index
+        let u = null;
+        try {
+            const docSnap = await window._fsGetDoc(window._fsDoc(db_fs, 'users', email));
+            if (docSnap.exists()) u = docSnap.data();
+        } catch(e1) {}
         
-        let u;
-        if (!snap.empty) {
-            u = snap.docs[0].data();
-        } else {
-            // User belum ada di Firestore — tampilkan data minimal
-            u = { email, name: email.split('@')[0], picture: '', followers: [], following: [], username: '' };
+        // Fallback: query by email field
+        if (!u) {
+            try {
+                const snap = await window._fsGetDocs(
+                    window._fsQuery(window._fsCollection(db_fs, 'users'), window._fsWhere('email', '==', email))
+                );
+                if (!snap.empty) u = snap.docs[0].data();
+            } catch(e2) {}
         }
+        
+        if (!u) u = { email, name: email.split('@')[0], picture: '', followers: [], following: [], username: '' };
         
         const displayName = u.name || email.split('@')[0];
         if (nameEl) nameEl.innerText = displayName;
         if (emailEl) emailEl.innerText = u.username ? '@' + u.username : email;
         
         if (avatarEl) {
-            if (u.picture) {
-                avatarEl.innerHTML = '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">';
-            } else {
-                avatarEl.innerHTML = '';
-                avatarEl.innerText = displayName.charAt(0).toUpperCase();
-            }
+            if (u.picture) avatarEl.innerHTML = '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">';
+            else { avatarEl.innerHTML = ''; avatarEl.innerText = displayName.charAt(0).toUpperCase(); }
         }
         
         if (followersEl) followersEl.innerText = (u.followers || []).length;
@@ -987,20 +980,18 @@ async function viewUserProfile(email) {
             btnFollow.style.background = isFollowing ? 'rgba(255,255,255,0.1)' : 'white';
             btnFollow.style.color = isFollowing ? 'white' : 'black';
         }
-        if (btnMsg) {
-            btnMsg.style.display = isOtherUser ? 'inline-block' : 'none';
-        }
+        if (btnMsg) btnMsg.style.display = isOtherUser ? 'inline-block' : 'none';
         
         window._viewingUser = u;
-        
-        // Load aktivitas
         _loadUserActivity(email, u);
         
     } catch(e) {
         console.error('viewUserProfile error:', e);
-        if (nameEl) nameEl.innerText = email.split('@')[0];
-        if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Gagal memuat profil.</div>';
-        window._viewingUser = { email, name: email.split('@')[0] };
+        const dn = email.split('@')[0];
+        if (nameEl) nameEl.innerText = dn;
+        if (avatarEl) { avatarEl.innerHTML = ''; avatarEl.innerText = dn.charAt(0).toUpperCase(); }
+        if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas.</div>';
+        window._viewingUser = { email, name: dn };
     }
 }
 
