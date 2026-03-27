@@ -2520,11 +2520,19 @@ async function _checkNewMessages() {
         });
         if (newMsgs.length > 0 && _lastMsgCheck > 0) {
             const sender = newMsgs[0].fromName || newMsgs[0].from.split('@')[0];
-            showToast('💬 Pesan baru dari ' + sender);
+            const text = newMsgs[0].text || (newMsgs[0].photo ? '📷 Foto' : '');
+            showToast('💬 Pesan dari ' + sender);
+            // Kirim notifikasi via Dart (muncul di status bar Android)
+            if (window.flutter_inappwebview) {
+                try {
+                    window.flutter_inappwebview.callHandler('sendAnnouncement',
+                        'Pesan dari ' + sender, text, 'message');
+                } catch(e) {}
+            }
             // Notifikasi browser jika diizinkan
             if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification('Auspoty — Pesan Baru', {
-                    body: sender + ': ' + newMsgs[0].text,
+                new Notification('Auspoty — Pesan dari ' + sender, {
+                    body: text || 'Pesan baru',
                     icon: '/favicon.ico'
                 });
             }
