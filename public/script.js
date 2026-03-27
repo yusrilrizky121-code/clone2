@@ -2051,7 +2051,13 @@ async function _simpleHash(str) {
 function doGoogleAuth() {
     authClearErr();
     if (window.flutter_inappwebview) {
-        try { window.flutter_inappwebview.callHandler('openGoogleLogin'); return; } catch(e) {}
+        // Buka login Google di browser eksternal (Chrome) — bukan di WebView
+        // karena WebView Android blokir OAuth Google
+        try {
+            window.flutter_inappwebview.callHandler('openExternalLogin');
+            showToast('Membuka browser untuk login Google...');
+            return;
+        } catch(e) {}
     }
     if (typeof window._firebaseSignIn === 'function') window._firebaseSignIn();
     else _authShowErr('Login Google belum tersedia');

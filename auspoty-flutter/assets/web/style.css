@@ -251,14 +251,13 @@ img { content-visibility: auto; }
     display: flex; align-items: center; gap: 12px;
     z-index: 900; overflow: hidden;
     transform: translateZ(0);
-    animation: slideUpMini .3s cubic-bezier(.1,.9,.2,1);
 }
 .mini-player::before {
     content: ''; position: absolute; inset: 0;
     background: var(--mini-accent, rgba(124,58,237,0.12));
     pointer-events: none;
 }
-@keyframes slideUpMini { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes slideUpMini { from { opacity:0; } to { opacity:1; } }
 .mini-player img { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
 .mini-player-info { flex: 1; overflow: hidden; }
 .mini-player-title { font-size: 13px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
@@ -274,8 +273,8 @@ img { content-visibility: auto; }
     z-index: 2000; display: none; flex-direction: column; overflow: hidden;
     background: #0a0a0f;
 }
-@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.modal-overlay.open { display: flex; animation: slideUp .32s cubic-bezier(.1,.9,.2,1); }
+@keyframes slideUp { from { opacity:0; } to { opacity:1; } }
+.modal-overlay.open { display: flex; }
 
 /* Blurred album art bg — DISABLED on low-end, use solid gradient instead */
 #playerBg {
