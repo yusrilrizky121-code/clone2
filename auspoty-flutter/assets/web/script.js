@@ -1787,10 +1787,144 @@ function _updateWaveform(pct) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    applyAllSettings(); updateProfileUI(); loadHomeData(); renderSearchCategories();
-
-
+    applyAllSettings(); renderSearchCategories();
+    // Cek auth state — tampilkan login screen jika belum login
+    _checkAuthAndInit();
 });
+
+// ============================================================
+// AUTH SCREEN — Login / Register
+// ============================================================
+function _checkAuthAndInit() {
+    const user = getGoogleUser();
+    if (user && user.email) {
+        // Sudah login — langsung masuk app
+        _hideAuthScreen();
+        updateProfileUI();
+        loadHomeData();
+    } else {
+        // Belum login — tampilkan auth screen
+        _showAuthScreen();
+    }
+}
+
+function _showAuthScreen() {
+    const s = document.getElementById('authScreen');
+    if (s) s.style.display = 'block';
+}
+
+function _hideAuthScreen() {
+    const s = document.getElementById('authScreen');
+    if (s) s.style.display = 'none';
+}
+
+function authSwitchTab(tab) {
+    const isLogin = tab === 'login';
+    document.getElementById('formLogin').style.display = isLogin ? 'block' : 'none';
+    document.getElementById('formRegister').style.display = isLogin ? 'none' : 'block';
+    const tl = document.getElementById('tabLogin');
+    const tr = document.getElementById('tabRegister');
+    if (tl) { tl.style.background = isLogin ? 'white' : 'transparent'; tl.style.color = isLogin ? '#0a0a0f' : 'rgba(255,255,255,0.6)'; }
+    if (tr) { tr.style.background = isLogin ? 'transparent' : 'white'; tr.style.color = isLogin ? 'rgba(255,255,255,0.6)' : '#0a0a0f'; }
+    authClearErr();
+}
+
+function authClearErr() {
+    const e = document.getElementById('authError');
+    if (e) e.style.display = 'none';
+}
+
+function _authShowErr(msg) {
+    const e = document.getElementById('authError');
+    if (e) { e.innerText = msg; e.style.display = 'block'; }
+}
+
+function _authSetLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.style.opacity = loading ? '0.6' : '1';
+}
+
+function _authSuccess(userData) {
+    localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+    _hideAuthScreen();
+    updateProfileUI();
+    loadHomeData();
+    if (typeof syncUserProfile === 'function') syncUserProfile();
+    showToast('Selamat datang, ' + (userData.name || '').split(' ')[0] + '!');
+}
+
+async function doLogin() {
+    const email = (document.getElementById('loginEmail').value || '').trim();
+    const pass = document.getElementById('loginPassword').value || '';
+    if (!email || !pass) { _authShowErr('Email dan password wajib diisi'); return; }
+    _authSetLoading('btnLogin', true);
+    authClearErr();
+    try {
+        if (typeof window._authLogin === 'function') {
+            const userData = await window._authLogin(email, pass);
+            _authSuccess(userData);
+        } else {
+            // Fallback: cek di Firestore manual
+            _authShowErr('Auth belum siap, coba lagi');
+        }
+    } catch(e) {
+        const msg = e.code === 'auth/user-not-found' ? 'Email tidak terdaftar' :
+                    e.code === 'auth/wrong-password' ? 'Password salah' :
+                    e.code === 'auth/invalid-email' ? 'Format email tidak valid' :
+                    e.code === 'auth/invalid-credential' ? 'Email atau password salah' :
+                    'Login gagal: ' + (e.message || e.code || String(e));
+        _authShowErr(msg);
+    } finally { _authSetLoading('btnLogin', false); }
+}
+
+async function doRegister() {
+    const name = (document.getElementById('regName').value || '').trim();
+    const email = (document.getElementById('regEmail').value || '').trim();
+    const pass = document.getElementById('regPassword').value || '';
+    if (!name) { _authShowErr('Nama wajib diisi'); return; }
+    if (!email) { _authShowErr('Email wajib diisi'); return; }
+    if (pass.length < 6) { _authShowErr('Password minimal 6 karakter'); return; }
+    _authSetLoading('btnRegister', true);
+    authClearErr();
+    try {
+        if (typeof window._authRegister === 'function') {
+            const userData = await window._authRegister(name, email, pass);
+            _authSuccess(userData);
+        } else {
+            _authShowErr('Auth belum siap, coba lagi');
+        }
+    } catch(e) {
+        const msg = e.code === 'auth/email-already-in-use' ? 'Email sudah terdaftar, silakan masuk' :
+                    e.code === 'auth/invalid-email' ? 'Format email tidak valid' :
+                    e.code === 'auth/weak-password' ? 'Password terlalu lemah' :
+                    'Daftar gagal: ' + (e.message || e.code || String(e));
+        _authShowErr(msg);
+    } finally { _authSetLoading('btnRegister', false); }
+}
+
+function doGoogleAuth() {
+    authClearErr();
+    if (window.flutter_inappwebview) {
+        try { window.flutter_inappwebview.callHandler('openGoogleLogin'); return; } catch(e) {}
+    }
+    if (typeof window._firebaseSignIn === 'function') window._firebaseSignIn();
+    else _authShowErr('Login Google belum tersedia');
+}
+
+// Override logoutFromGoogle agar kembali ke auth screen
+const _origLogout = typeof logoutFromGoogle === 'function' ? logoutFromGoogle : null;
+window.logoutFromGoogle = function() {
+    if (_origLogout) _origLogout();
+    else {
+        if (typeof window._firebaseSignOut === 'function') window._firebaseSignOut();
+        else localStorage.removeItem('auspotyGoogleUser');
+    }
+    setTimeout(() => {
+        if (!getGoogleUser()) _showAuthScreen();
+    }, 500);
+};
 
 
 // ============================================================
