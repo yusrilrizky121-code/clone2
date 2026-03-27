@@ -469,9 +469,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       })();
     """);
 
-    // Progress timer dari Dart → inject ke WebView setiap 500ms
+    // Progress timer dari Dart → inject ke WebView setiap 1 detik (hemat RAM)
     _localProgressTimer?.cancel();
-    _localProgressTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
+    _localProgressTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) async {
       // Cek dari player langsung, bukan dari _localPlaying flag
       final pos = _localPlayer.position.inMilliseconds;
       final dur = _localPlayer.duration?.inMilliseconds ?? 0;

@@ -289,7 +289,7 @@ function startProgressBar() {
         if (_mf)   _mf.style.width   = pctStr;
         if (_ct) _ct.innerText = formatTime(cur);
         if (_tt) _tt.innerText = formatTime(dur);
-    }, 500);
+    }, 1000); // 1 detik — hemat RAM
 
     progressInterval = { cancel: function() { clearInterval(_intervalId); } };
 }
@@ -1218,7 +1218,7 @@ function openChatWithUser() {
     if (_chatInterval) clearInterval(_chatInterval);
     _chatInterval = setInterval(() => {
         loadDMMessages();
-        // Refresh status setiap 30 detik
+        // Refresh status setiap 60 detik (hemat RAM)
         if (chatStatus && window._firestoreDB) {
             window._fsGetDoc(window._fsDoc(window._firestoreDB, 'users', targetUser.email)).then(snap => {
                 if (snap.exists()) {
@@ -1229,7 +1229,7 @@ function openChatWithUser() {
                 }
             }).catch(() => {});
         }
-    }, 5000);
+    }, 10000);
 }
 
 async function loadChatMessages(otherEmail) {
@@ -2436,7 +2436,8 @@ let _onlineStatusInterval = null;
 function _startOnlineStatus() {
     _updateLastSeen();
     if (_onlineStatusInterval) clearInterval(_onlineStatusInterval);
-    _onlineStatusInterval = setInterval(_updateLastSeen, 30000);
+    // Update setiap 60 detik — hemat RAM dan baterai
+    _onlineStatusInterval = setInterval(_updateLastSeen, 60000);
 }
 
 async function _updateLastSeen() {
@@ -2502,7 +2503,8 @@ let _lastMsgCheck = 0;
 
 function _startMsgNotifPolling() {
     if (_msgNotifInterval) return;
-    _msgNotifInterval = setInterval(_checkNewMessages, 15000); // cek tiap 15 detik
+    // Kurangi frekuensi — cek tiap 30 detik (hemat RAM)
+    _msgNotifInterval = setInterval(_checkNewMessages, 30000);
 }
 
 async function _checkNewMessages() {
@@ -2621,11 +2623,10 @@ function _startOfflinePolling() {
     _offlineCheckInterval = setInterval(async function() {
         if (!_wasOffline) { _stopOfflinePolling(); return; }
         try {
-            // Ping API ringan untuk cek koneksi
             const r = await fetch('/api/search?query=test&_t=' + Date.now(), { cache: 'no-store' });
             if (r.ok) _onBackOnline();
         } catch(e) {}
-    }, 5000);
+    }, 8000); // 8 detik — hemat RAM
 }
 
 function _stopOfflinePolling() {
