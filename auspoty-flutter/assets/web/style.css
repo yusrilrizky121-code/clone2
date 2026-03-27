@@ -59,25 +59,23 @@ img {
     display: block;
     /* NO contain — causes repaint/compositing issues on Android WebView */
 }
-/* Chat view butuh flex */
+/* Chat view */
 #view-chat.active { display: block; }
-#view-chat {
-    background: var(--bg-base);
-}
+#view-chat { background: var(--bg-base); }
 #chatMessages {
-    padding: 12px 16px 140px;
+    padding: 12px 16px 8px;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 #chatInputBar {
-    position: fixed;
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-    left: 0; right: 0;
-    background: var(--bg-main);
-    border-top: 1px solid rgba(255,255,255,0.06);
-    padding: 8px 12px;
+    position: sticky;
+    bottom: 0;
+    background: #0d0d18;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 8px 12px 12px;
     z-index: 500;
+    margin-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ===== TOUCH — no 300ms delay on all tappables ===== */
