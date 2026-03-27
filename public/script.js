@@ -1642,28 +1642,28 @@ function renderCommentItem(d, allReplies, currentUser, isReply = false) {
     const likes = d.likes || [];
     const isLiked = currentUser && likes.includes(currentUser.email);
     const likeColor = isLiked ? 'var(--accent)' : 'var(--text-sub)';
+    // Klik profil: tutup komentar modal dulu, lalu buka profil
+    const profileClick = "closeCommentsModal();viewUserProfile('" + d.email + "');";
     
     let html = '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;' + (isReply ? 'margin-left:40px;scale:0.95;transform-origin:left;' : '') + '">' +
-        '<div onclick="viewUserProfile(\'' + d.email + '\')" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;cursor:pointer;">' + 
-        (d.picture ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;">' : d.name.charAt(0).toUpperCase()) + '</div>' +
+        '<div onclick="' + profileClick + '" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;cursor:pointer;">' + 
+        (d.picture ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;">' : (d.name||'?').charAt(0).toUpperCase()) + '</div>' +
         '<div style="flex:1;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
-        '<span onclick="viewUserProfile(\'' + d.email + '\')" style="font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">' + d.name + badge + '</span>' +
+        '<span onclick="' + profileClick + '" style="font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">' + (d.name||'?') + badge + '</span>' +
         '<span style="font-size:11px;color:var(--text-sub);">' + time + '</span></div>' +
         '<p style="font-size:14px;color:white;line-height:1.5;margin:0;">' + d.text + '</p>' +
         '<div style="display:flex;gap:16px;margin-top:8px;align-items:center;">' +
         '<div onclick="toggleLikeComment(\'' + d.id + '\')" style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:' + likeColor + ';">' +
         '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:' + likeColor + ';"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>' + (likes.length || 0) + '</div>' +
-        (!isReply ? '<div onclick="replyToComment(\'' + d.id + '\', \'' + d.name + '\')" style="font-size:12px;color:var(--text-sub);cursor:pointer;">Balas</div>' : '') +
+        (!isReply ? '<div onclick="replyToComment(\'' + d.id + '\', \'' + (d.name||'').replace(/'/g,"\\'") + '\')" style="font-size:12px;color:var(--text-sub);cursor:pointer;">Balas</div>' : '') +
         (canDelete ? '<div onclick="deleteComment(\'' + d.id + '\')" style="font-size:12px;color:#ff5252;cursor:pointer;margin-left:auto;">Hapus</div>' : '') +
         '</div></div></div>';
     
-    // Render replies
     if (!isReply) {
         const itemReplies = allReplies.filter(r => r.parentId === d.id).sort((a, b) => (a.createdAt ? a.createdAt.seconds : 0) - (b.createdAt ? b.createdAt.seconds : 0));
         html += itemReplies.map(r => renderCommentItem(r, [], currentUser, true)).join('');
     }
-    
     return html;
 }
 
@@ -1853,55 +1853,115 @@ function _authSuccess(userData) {
     loadHomeData();
     if (typeof syncUserProfile === 'function') syncUserProfile();
     showToast('Selamat datang, ' + (userData.name || '').split(' ')[0] + '!');
+    // Mulai polling notifikasi pesan
+    _lastMsgCheck = Date.now();
+    _startMsgNotifPolling();
+    // Minta izin notifikasi browser
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
 }
 
 async function doLogin() {
-    const email = (document.getElementById('loginEmail').value || '').trim();
+    const email = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
     const pass = document.getElementById('loginPassword').value || '';
     if (!email || !pass) { _authShowErr('Email dan password wajib diisi'); return; }
     _authSetLoading('btnLogin', true);
     authClearErr();
     try {
+        // Coba Firebase Auth dulu
         if (typeof window._authLogin === 'function') {
-            const userData = await window._authLogin(email, pass);
-            _authSuccess(userData);
-        } else {
-            // Fallback: cek di Firestore manual
-            _authShowErr('Auth belum siap, coba lagi');
+            try {
+                const userData = await window._authLogin(email, pass);
+                _authSuccess(userData); return;
+            } catch(fe) {
+                // Jika Firebase Auth tidak aktif, fallback ke Firestore
+                if (fe.code !== 'auth/operation-not-allowed' && fe.code !== 'auth/configuration-not-found') {
+                    const msg = fe.code === 'auth/user-not-found' || fe.code === 'auth/invalid-credential' ? 'Email atau password salah' :
+                                fe.code === 'auth/wrong-password' ? 'Password salah' :
+                                fe.code === 'auth/invalid-email' ? 'Format email tidak valid' :
+                                'Login gagal: ' + (fe.message || fe.code);
+                    _authShowErr(msg); return;
+                }
+            }
         }
+        // Fallback: cek Firestore
+        await _loginWithFirestore(email, pass);
     } catch(e) {
-        const msg = e.code === 'auth/user-not-found' ? 'Email tidak terdaftar' :
-                    e.code === 'auth/wrong-password' ? 'Password salah' :
-                    e.code === 'auth/invalid-email' ? 'Format email tidak valid' :
-                    e.code === 'auth/invalid-credential' ? 'Email atau password salah' :
-                    'Login gagal: ' + (e.message || e.code || String(e));
-        _authShowErr(msg);
+        _authShowErr('Login gagal: ' + (e.message || String(e)));
     } finally { _authSetLoading('btnLogin', false); }
+}
+
+async function _loginWithFirestore(email, pass) {
+    // Tunggu Firestore siap
+    for (let i = 0; i < 10 && !window._firestoreDB; i++) await new Promise(r => setTimeout(r, 300));
+    if (!window._firestoreDB) { _authShowErr('Koneksi gagal, coba lagi'); return; }
+    const snap = await window._fsGetDoc(window._fsDoc(window._firestoreDB, 'users', email));
+    if (!snap.exists()) { _authShowErr('Email tidak terdaftar'); return; }
+    const data = snap.data();
+    // Simple hash check — password disimpan sebagai hash sederhana
+    const hash = await _simpleHash(pass);
+    if (data.pwHash && data.pwHash !== hash) { _authShowErr('Password salah'); return; }
+    if (!data.pwHash) { _authShowErr('Akun ini menggunakan login Google'); return; }
+    const userData = { name: data.name, email: data.email, picture: data.picture || '', sub: data.email };
+    _authSuccess(userData);
 }
 
 async function doRegister() {
     const name = (document.getElementById('regName').value || '').trim();
-    const email = (document.getElementById('regEmail').value || '').trim();
+    const email = (document.getElementById('regEmail').value || '').trim().toLowerCase();
     const pass = document.getElementById('regPassword').value || '';
     if (!name) { _authShowErr('Nama wajib diisi'); return; }
-    if (!email) { _authShowErr('Email wajib diisi'); return; }
+    if (!email || !email.includes('@')) { _authShowErr('Email tidak valid'); return; }
     if (pass.length < 6) { _authShowErr('Password minimal 6 karakter'); return; }
     _authSetLoading('btnRegister', true);
     authClearErr();
     try {
+        // Coba Firebase Auth dulu
         if (typeof window._authRegister === 'function') {
-            const userData = await window._authRegister(name, email, pass);
-            _authSuccess(userData);
-        } else {
-            _authShowErr('Auth belum siap, coba lagi');
+            try {
+                const userData = await window._authRegister(name, email, pass);
+                _authSuccess(userData); return;
+            } catch(fe) {
+                if (fe.code === 'auth/email-already-in-use') { _authShowErr('Email sudah terdaftar, silakan masuk'); return; }
+                if (fe.code !== 'auth/operation-not-allowed' && fe.code !== 'auth/configuration-not-found') {
+                    _authShowErr('Daftar gagal: ' + (fe.message || fe.code)); return;
+                }
+            }
         }
+        // Fallback: simpan ke Firestore
+        await _registerWithFirestore(name, email, pass);
     } catch(e) {
-        const msg = e.code === 'auth/email-already-in-use' ? 'Email sudah terdaftar, silakan masuk' :
-                    e.code === 'auth/invalid-email' ? 'Format email tidak valid' :
-                    e.code === 'auth/weak-password' ? 'Password terlalu lemah' :
-                    'Daftar gagal: ' + (e.message || e.code || String(e));
-        _authShowErr(msg);
+        _authShowErr('Daftar gagal: ' + (e.message || String(e)));
     } finally { _authSetLoading('btnRegister', false); }
+}
+
+async function _registerWithFirestore(name, email, pass) {
+    for (let i = 0; i < 10 && !window._firestoreDB; i++) await new Promise(r => setTimeout(r, 300));
+    if (!window._firestoreDB) { _authShowErr('Koneksi gagal, coba lagi'); return; }
+    // Cek apakah email sudah ada
+    const existing = await window._fsGetDoc(window._fsDoc(window._firestoreDB, 'users', email));
+    if (existing.exists() && existing.data().pwHash) { _authShowErr('Email sudah terdaftar, silakan masuk'); return; }
+    const hash = await _simpleHash(pass);
+    await window._fsSetDoc(window._fsDoc(window._firestoreDB, 'users', email), {
+        email, name, picture: '', username: '', pwHash: hash,
+        followers: [], following: [], createdAt: window._fsTimestamp()
+    }, { merge: true });
+    const userData = { name, email, picture: '', sub: email };
+    _authSuccess(userData);
+}
+
+async function _simpleHash(str) {
+    // SHA-256 via Web Crypto API
+    try {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    } catch(e) {
+        // Fallback sederhana jika crypto tidak tersedia
+        let h = 0;
+        for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
+        return Math.abs(h).toString(16);
+    }
 }
 
 function doGoogleAuth() {
@@ -2169,9 +2229,12 @@ async function loadDMMessages() {
     if (!_dmTarget) return;
     const me = getGoogleUser();
     if (!me) return;
-    const container = document.getElementById('dmMessages');
-    container.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;font-size:13px;">Memuat pesan...</div>';
+    // Gunakan chatMessages (view chat) atau dmMessages (modal DM)
+    const container = document.getElementById('chatMessages') || document.getElementById('dmMessages');
+    if (!container) return;
     try {
+        for (let i = 0; i < 10 && !window._firestoreDB; i++) await new Promise(r => setTimeout(r, 300));
+        if (!window._firestoreDB) { container.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;font-size:13px;">Koneksi gagal</div>'; return; }
         const convId = _getDMId(me.email, _dmTarget.email);
         const q = window._fsQuery(
             window._fsCollection(window._firestoreDB, 'messages'),
@@ -2179,7 +2242,6 @@ async function loadDMMessages() {
         );
         const snap = await window._fsGetDocs(q);
         if (snap.empty) { container.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;font-size:13px;">Belum ada pesan. Mulai percakapan!</div>'; return; }
-        // Sort di client untuk hindari Firestore index requirement
         const msgs = snap.docs.map(d => d.data()).sort((a, b) => (a.createdAt ? a.createdAt.seconds : 0) - (b.createdAt ? b.createdAt.seconds : 0));
         container.innerHTML = msgs.map(msg => {
             const isMine = msg.from === me.email;
@@ -2191,24 +2253,69 @@ async function loadDMMessages() {
                 '</div></div>';
         }).join('');
         container.scrollTop = container.scrollHeight;
-    } catch(e) { container.innerHTML = '<div style="color:#ff5252;text-align:center;padding:16px;font-size:13px;">Gagal: ' + e.message + '</div>'; }
+    } catch(e) { container.innerHTML = '<div style="color:#ff5252;text-align:center;padding:16px;font-size:13px;">Gagal memuat pesan</div>'; }
 }
 
 async function sendDM() {
     const me = getGoogleUser();
     if (!me || !_dmTarget) return;
-    const input = document.getElementById('dmInput');
+    // Coba chatInput dulu (view chat), fallback ke dmInput (modal)
+    const input = document.getElementById('chatInput') || document.getElementById('dmInput');
+    if (!input) return;
     const text = input.value.trim();
     if (!text) return;
     try {
+        for (let i = 0; i < 10 && !window._firestoreDB; i++) await new Promise(r => setTimeout(r, 300));
+        if (!window._firestoreDB) { showToast('Koneksi gagal'); return; }
         const convId = _getDMId(me.email, _dmTarget.email);
         await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'messages'), {
             convId, from: me.email, to: _dmTarget.email,
-            text, createdAt: window._fsTimestamp()
+            fromName: me.name || me.email.split('@')[0],
+            text, createdAt: window._fsTimestamp(), read: false
         });
         input.value = '';
         loadDMMessages();
-    } catch(e) { showToast('Gagal kirim: ' + e.message); }
+    } catch(e) { showToast('Gagal kirim: ' + (e.message || String(e))); }
+}
+
+// ── NOTIFIKASI PESAN MASUK ─────────────────────────────────────────────────
+let _msgNotifInterval = null;
+let _lastMsgCheck = 0;
+
+function _startMsgNotifPolling() {
+    if (_msgNotifInterval) return;
+    _msgNotifInterval = setInterval(_checkNewMessages, 15000); // cek tiap 15 detik
+}
+
+async function _checkNewMessages() {
+    const me = getGoogleUser();
+    if (!me || !window._firestoreDB) return;
+    try {
+        const q = window._fsQuery(
+            window._fsCollection(window._firestoreDB, 'messages'),
+            window._fsWhere('to', '==', me.email),
+            window._fsWhere('read', '==', false)
+        );
+        const snap = await window._fsGetDocs(q);
+        if (snap.empty) return;
+        // Filter pesan baru sejak terakhir cek
+        const newMsgs = snap.docs.map(d => d.data()).filter(m => {
+            const ts = m.createdAt ? m.createdAt.seconds * 1000 : 0;
+            return ts > _lastMsgCheck;
+        });
+        if (newMsgs.length > 0 && _lastMsgCheck > 0) {
+            const sender = newMsgs[0].fromName || newMsgs[0].from.split('@')[0];
+            showToast('💬 Pesan baru dari ' + sender);
+            // Notifikasi browser jika diizinkan
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('Auspoty — Pesan Baru', {
+                    body: sender + ': ' + newMsgs[0].text,
+                    icon: '/favicon.ico'
+                });
+            }
+        }
+        _lastMsgCheck = Date.now();
+    } catch(e) {}
 }
 
 // Sync profil saat login

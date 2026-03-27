@@ -264,10 +264,6 @@
 <div id="view-search" class="view-section">
     <div class="search-header-container">
         <h1>Cari</h1>
-        <div style="display:flex;gap:8px;margin-top:12px;">
-            <div class="pill active" id="searchTabMusic" onclick="switchSearchTab('music')">Musik</div>
-            <div class="pill" id="searchTabUsers" onclick="switchSearchTab('users')">Pengguna</div>
-        </div>
     </div>
     <div class="search-box-wrapper">
         <svg class="search-icon-input" viewBox="0 0 24 24"><path d="M10.533 1.279c-5.18 0-9.407 4.14-9.407 9.279s4.226 9.279 9.407 9.279c2.234 0 4.29-.77 5.907-2.058l4.353 4.353a1 1 0 101.414-1.414l-4.344-4.344a9.157 9.157 0 002.077-5.816c0-5.14-4.226-9.279-9.407-9.279zm-7.407 9.279c0-4.006 3.302-7.279 7.407-7.279s7.407 3.273 7.407 7.279-3.302 7.279-7.407 7.279-7.407-3.273-7.407-7.279z"/></svg>
@@ -279,9 +275,6 @@
     </div>
     <div id="searchResultsUI" style="display:none;">
         <div class="vertical-list" id="searchResults"></div>
-    </div>
-    <div id="userSearchResultsUI" style="display:none;padding:0 16px;">
-        <div class="vertical-list" id="userSearchResults"></div>
     </div>
 </div>
 
@@ -298,7 +291,6 @@
         <div style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;">
             <button id="btnFollowUser" onclick="toggleFollowUser()" style="background:white;color:black;border:none;border-radius:20px;padding:8px 24px;font-weight:700;font-size:14px;cursor:pointer;">Ikuti</button>
             <button id="btnMessageUser" onclick="openChatWithUser()" style="background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:8px 24px;font-weight:700;font-size:14px;cursor:pointer;">Pesan</button>
-            <button id="btnSearchUsersInProfile" onclick="openSearchUsers()" style="background:rgba(255,255,255,0.08);color:white;border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:8px 18px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;">Cari Pengguna</button>
         </div>
         
         <div style="display:flex;justify-content:center;gap:40px;border-top:1px solid rgba(255,255,255,0.05);padding-top:20px;">
@@ -438,25 +430,6 @@
                 <div class="settings-icon" style="background:#e74c3c;"><svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg></div>
                 <div><div class="settings-item-title">Keluar</div><div class="settings-item-sub" id="googleLogoutSub"></div></div>
             </div>
-        </div>
-    </div>
-
-    <!-- Tombol Cari Pengguna -->
-    <div class="settings-group" style="margin-bottom:0;cursor:pointer;" onclick="openSearchUsers()">
-        <div class="settings-item">
-            <div class="settings-item-left">
-                <div class="settings-icon" style="background:#3b82f6;"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></div>
-                <div><div class="settings-item-title">Cari Pengguna</div><div class="settings-item-sub">Temukan & ikuti pengguna lain</div></div>
-            </div>
-            <svg viewBox="0 0 24 24" class="settings-chevron"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
-        </div>
-    </div>
-                <div class="settings-icon" style="background:#c0392b;padding:6px;">
-                    <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:white;"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-                </div>
-                <div><div class="settings-item-title" style="color:#e74c3c;">Keluar dari Google</div><div class="settings-item-sub" id="googleLogoutSub">Tap untuk logout</div></div>
-            </div>
-            <svg viewBox="0 0 24 24" class="settings-chevron"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
         </div>
     </div>
 
