@@ -1,52 +1,66 @@
 from http.server import BaseHTTPRequestHandler
-import json, urllib.parse, urllib.request, random, time
+import json, urllib.parse, urllib.request, time, random
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
+YTMP3_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://id.ytmp3.mobi/',
     'Origin': 'https://id.ytmp3.mobi',
+    'Accept': '*/*',
+    'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
 }
 
-def _get(url):
-    req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=12) as r:
-        return json.loads(r.read().decode())
+def _get_json(url):
+    req = urllib.request.Request(url, headers=YTMP3_HEADERS)
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read().decode('utf-8', errors='replace'))
 
 def get_download_url(video_id):
-    # Step 1: init — get convertURL with sig
+    """Gunakan id.ytmp3.mobi/v1/ API"""
     rnd = random.random()
-    init = _get(f'https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_={rnd}')
+
+    # Step 1: init — dapatkan convertURL
+    init = _get_json(f'https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_={rnd}')
     if init.get('error', 0) != 0:
-        raise Exception('init error: ' + str(init))
-    convert_url = init['convertURL']
+        raise Exception(f'init error: {init}')
+    convert_url = init.get('convertURL', '')
+    if not convert_url:
+        raise Exception('convertURL kosong dari init')
 
-    # Step 2: convert — submit video_id
+    # Step 2: convert — kirim video_id
     rnd2 = random.random()
-    conv = _get(f'{convert_url}&v={video_id}&f=mp3&_={rnd2}')
+    conv = _get_json(f'{convert_url}&v={video_id}&f=mp3&_={rnd2}')
     if conv.get('error', 0) != 0:
-        raise Exception('convert error: ' + str(conv))
+        raise Exception(f'convert error: {conv}')
 
-    progress_url = conv['progressURL']
-    download_url = conv['downloadURL']
+    progress_url = conv.get('progressURL', '')
+    download_url = conv.get('downloadURL', '')
     title = conv.get('title', video_id)
 
-    # Step 3: poll progress until ready (progress == 3)
-    for _ in range(25):
-        time.sleep(1.2)
-        rnd3 = random.random()
-        prog = _get(f'{progress_url}&_={rnd3}')
-        if prog.get('error', 0) != 0:
-            raise Exception('progress error: ' + str(prog))
-        if prog.get('progress', 0) >= 3:
-            final_url = prog.get('downloadURL') or download_url
-            return {
-                'url': final_url,
-                'title': prog.get('title') or title,
-                'ext': 'mp3',
-                'headers': dict(HEADERS),
-            }
+    if not progress_url:
+        # Langsung ada download URL
+        if download_url:
+            return {'url': download_url, 'title': title, 'ext': 'mp3'}
+        raise Exception('Tidak ada progressURL maupun downloadURL')
 
-    raise Exception('Timeout waiting for conversion')
+    # Step 3: poll progress sampai selesai (progress >= 3)
+    for attempt in range(30):
+        time.sleep(1.5)
+        rnd3 = random.random()
+        try:
+            prog = _get_json(f'{progress_url}&_={rnd3}')
+        except Exception:
+            continue
+        if prog.get('error', 0) != 0:
+            raise Exception(f'progress error: {prog}')
+        p = prog.get('progress', 0)
+        if p >= 3:
+            final_url = prog.get('downloadURL') or download_url
+            final_title = prog.get('title') or title
+            if not final_url:
+                raise Exception('downloadURL kosong setelah konversi')
+            return {'url': final_url, 'title': final_title, 'ext': 'mp3'}
+
+    raise Exception('Timeout menunggu konversi (45 detik)')
 
 
 class handler(BaseHTTPRequestHandler):
@@ -81,3 +95,6 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass

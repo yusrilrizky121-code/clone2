@@ -772,6 +772,13 @@
             <label style="font-size:12px;color:var(--text-sub);display:block;margin-bottom:6px;">Nama Pengguna</label>
             <input id="editProfileName" type="text" placeholder="Masukkan nama..." style="width:100%;background:var(--bg-highlight);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px 14px;color:var(--text-main);font-size:15px;outline:none;">
         </div>
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px;color:var(--text-sub);display:block;margin-bottom:6px;">Username (@tag) — untuk dicari pengguna lain</label>
+            <div style="display:flex;align-items:center;background:var(--bg-highlight);border:1px solid rgba(255,255,255,0.1);border-radius:8px;overflow:hidden;">
+                <span style="padding:12px 8px 12px 14px;color:var(--accent);font-size:15px;font-weight:700;">@</span>
+                <input id="editProfileUsername" type="text" placeholder="username (huruf, angka, _)" style="flex:1;background:transparent;border:none;padding:12px 14px 12px 0;color:var(--text-main);font-size:15px;outline:none;" oninput="this.value=this.value.replace(/[^a-zA-Z0-9_]/g,'').toLowerCase()">
+            </div>
+        </div>
         <button onclick="saveProfile()" style="width:100%;background:var(--spotify-green);color:#000;border:none;border-radius:30px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;">Simpan</button>
     </div>
 </div>
