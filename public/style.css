@@ -59,6 +59,9 @@ img {
 }
 /* Chat view butuh flex */
 #view-chat.active { display: flex; flex-direction: column; }
+/* Saat di chat view, mini player tidak perlu tampil (input sudah di atas nav) */
+#view-chat.active ~ #miniPlayer,
+body:has(#view-chat.active) .mini-player { display: none !important; }
 
 /* ===== TOUCH — no 300ms delay on all tappables ===== */
 a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
