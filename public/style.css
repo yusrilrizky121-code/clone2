@@ -61,14 +61,17 @@ img {
 }
 /* Chat view butuh flex */
 #view-chat.active { display: flex; flex-direction: column; }
-/* Chat view: full height, input di bawah, ikut keyboard */
+/* Chat view: isi penuh, input di bawah */
 #view-chat.active {
-    height: 100dvh; /* dynamic viewport height — ikut keyboard */
+    height: 100%;
+    max-height: 100vh;
     overflow: hidden;
+    position: relative;
 }
 #chatMessages {
     flex: 1;
     overflow-y: auto;
+    min-height: 0; /* penting agar flex child bisa shrink */
     -webkit-overflow-scrolling: touch;
 }
 
