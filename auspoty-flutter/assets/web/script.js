@@ -299,64 +299,121 @@ function closeVideoPreview() {
 let _trackPreviewPlayer = null;
 let _previewTouchTimer = null;
 let _previewCurrentVid = null;
+let _previewLoopTimer = null;
 
 function openTrackPreview(videoId) {
     _previewCurrentVid = videoId;
-    // Buat atau tampilkan modal preview
     let modal = document.getElementById('trackPreviewModal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'trackPreviewModal';
-        modal.style.cssText = 'position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(12px);';
         modal.innerHTML =
             '<div style="width:100%;max-width:360px;padding:0 16px;">' +
+            // Label
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+            '<div style="width:8px;height:8px;border-radius:50%;background:#ff4444;animation:blink 1s infinite;"></div>' +
+            '<span style="color:rgba(255,255,255,0.6);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Preview · Mute</span>' +
+            '<span style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:11px;" id="previewCountdown">0:30</span>' +
+            '</div>' +
+            // Video
             '<div style="position:relative;width:100%;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 24px 64px rgba(0,0,0,0.8);">' +
             '<div id="trackPreviewIframe" style="width:100%;height:100%;"></div>' +
-            '<div style="position:absolute;top:0;left:0;right:0;height:40px;background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);display:flex;align-items:center;padding:0 12px;">' +
-            '<span style="color:rgba(255,255,255,0.7);font-size:11px;font-weight:600;letter-spacing:1px;">PREVIEW VIDEO</span>' +
             '</div>' +
-            '</div>' +
-            '<div style="display:flex;gap:10px;margin-top:16px;">' +
-            '<button onclick="closeTrackPreview()" style="flex:1;padding:13px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:white;font-size:14px;font-weight:600;cursor:pointer;">Tutup</button>' +
-            '<button onclick="closeTrackPreview();playMusicById(\'' + videoId + '\')" style="flex:2;padding:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;color:white;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(167,139,250,0.4);">▶ Putar Lagu</button>' +
+            // Tombol
+            '<div style="display:flex;gap:10px;margin-top:14px;">' +
+            '<button onclick="closeTrackPreview()" style="flex:1;padding:13px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:12px;color:white;font-size:14px;font-weight:600;cursor:pointer;">✕ Tutup</button>' +
+            '<button id="previewPlayBtn" style="flex:2;padding:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;color:white;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(167,139,250,0.4);">▶ Putar Lagu</button>' +
             '</div>' +
             '</div>';
         modal.addEventListener('click', function(e) { if (e.target === modal) closeTrackPreview(); });
         document.body.appendChild(modal);
+        // Inject CSS blink
+        if (!document.getElementById('previewBlink')) {
+            var s = document.createElement('style');
+            s.id = 'previewBlink';
+            s.textContent = '@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}';
+            document.head.appendChild(s);
+        }
     } else {
         modal.style.display = 'flex';
-        // Update tombol putar dengan videoId baru
-        const playBtn = modal.querySelector('button:last-child');
-        if (playBtn) playBtn.onclick = function() { closeTrackPreview(); playMusicById(videoId); };
     }
 
-    // Buat YT player di dalam modal
+    // Update tombol putar
+    var playBtn = document.getElementById('previewPlayBtn');
+    if (playBtn) playBtn.onclick = function() { closeTrackPreview(); playMusicById(videoId); };
+
+    // Reset countdown
+    _startPreviewCountdown(30);
+
+    // Buat atau reload YT player — MUTE, autoplay, loop
     if (_trackPreviewPlayer && _trackPreviewPlayer.loadVideoById) {
-        try { _trackPreviewPlayer.loadVideoById(videoId); } catch(e) { _trackPreviewPlayer = null; }
+        try {
+            _trackPreviewPlayer.loadVideoById({ videoId: videoId, startSeconds: 30 });
+            _trackPreviewPlayer.mute();
+        } catch(e) { _trackPreviewPlayer = null; }
     }
     if (!_trackPreviewPlayer && typeof YT !== 'undefined' && YT.Player) {
         _trackPreviewPlayer = new YT.Player('trackPreviewIframe', {
             videoId: videoId,
-            playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, controls: 1 },
-            events: { onReady: (e) => e.target.playVideo() }
+            playerVars: {
+                autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1,
+                controls: 0, mute: 1, start: 30, disablekb: 1,
+                iv_load_policy: 3, fs: 0
+            },
+            events: {
+                onReady: function(e) {
+                    e.target.mute();
+                    e.target.playVideo();
+                },
+                onStateChange: function(e) {
+                    // Saat selesai atau hampir selesai — loop dari detik 30
+                    if (e.data === YT.PlayerState.ENDED) {
+                        e.target.seekTo(30);
+                        e.target.playVideo();
+                        _startPreviewCountdown(30);
+                    }
+                }
+            }
         });
     }
+}
+
+let _previewCountdownInterval = null;
+function _startPreviewCountdown(sec) {
+    if (_previewCountdownInterval) clearInterval(_previewCountdownInterval);
+    var remaining = sec;
+    var el = document.getElementById('previewCountdown');
+    if (el) el.innerText = '0:' + (remaining < 10 ? '0' : '') + remaining;
+    _previewCountdownInterval = setInterval(function() {
+        remaining--;
+        var el2 = document.getElementById('previewCountdown');
+        if (el2) el2.innerText = '0:' + (remaining < 10 ? '0' : '') + remaining;
+        if (remaining <= 0) {
+            clearInterval(_previewCountdownInterval);
+            // Loop: seek ke detik 30 lagi
+            if (_trackPreviewPlayer && _trackPreviewPlayer.seekTo) {
+                try { _trackPreviewPlayer.seekTo(30); _trackPreviewPlayer.playVideo(); } catch(e) {}
+            }
+            _startPreviewCountdown(30);
+        }
+    }, 1000);
 }
 
 function closeTrackPreview() {
     const modal = document.getElementById('trackPreviewModal');
     if (modal) modal.style.display = 'none';
+    if (_previewCountdownInterval) { clearInterval(_previewCountdownInterval); _previewCountdownInterval = null; }
     if (_trackPreviewPlayer) {
         try { _trackPreviewPlayer.pauseVideo(); } catch(e) {}
     }
     _previewCurrentVid = null;
 }
 
-// Long press untuk mobile
+// Long press untuk mobile — 600ms
 function _previewTouchStart(videoId, e) {
     _previewTouchEnd();
     _previewTouchTimer = setTimeout(function() {
-        e.preventDefault();
         openTrackPreview(videoId);
     }, 600);
 }
