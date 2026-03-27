@@ -2154,6 +2154,17 @@ function doGoogleAuth() {
 // Override logoutFromGoogle agar kembali ke auth screen
 // Override logoutFromGoogle — clear semua data dan tampilkan auth screen
 window.logoutFromGoogle = function() {
+    // Set offline dulu sebelum logout
+    const me = getGoogleUser();
+    if (me && window._firestoreDB) {
+        try {
+            window._fsSetDoc(
+                window._fsDoc(window._firestoreDB, 'users', me.email),
+                { online: false },
+                { merge: true }
+            ).catch(() => {});
+        } catch(e) {}
+    }
     // Clear semua data login
     localStorage.removeItem('auspotyGoogleUser');
     localStorage.removeItem('auspotyProfilePhoto');
@@ -2169,11 +2180,10 @@ window.logoutFromGoogle = function() {
     if (typeof _chatInterval !== 'undefined' && _chatInterval) {
         clearInterval(_chatInterval); _chatInterval = null;
     }
-    // Firebase sign out (tidak blocking)
+    // Firebase sign out
     if (typeof window._firebaseSignOut === 'function') {
         window._firebaseSignOut().catch(() => {});
     }
-    // Tampilkan auth screen langsung
     _showAuthScreen();
     showToast('Berhasil keluar');
 };
@@ -2540,10 +2550,34 @@ async function _updateLastSeen() {
     } catch(e) {}
 }
 
+// Set offline saat halaman ditutup/hidden
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        // App ke background — set offline
+        const me = getGoogleUser();
+        if (me && window._firestoreDB) {
+            try {
+                window._fsSetDoc(
+                    window._fsDoc(window._firestoreDB, 'users', me.email),
+                    { online: false },
+                    { merge: true }
+                ).catch(() => {});
+            } catch(e) {}
+        }
+    } else {
+        // App kembali ke foreground — set online
+        _updateLastSeen();
+    }
+});
+
 function _isUserOnline(userData) {
-    if (userData && userData.lastSeen) {
+    if (!userData) return false;
+    // Cek field online langsung
+    if (userData.online === false) return false;
+    // Cek lastSeen dalam 3 menit terakhir
+    if (userData.lastSeen) {
         const lastSeen = userData.lastSeen.seconds * 1000;
-        return (Date.now() - lastSeen) < 120000;
+        return (Date.now() - lastSeen) < 180000;
     }
     return false;
 }
