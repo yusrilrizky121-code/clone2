@@ -22,7 +22,7 @@ const _localHost = 'localfile.internal';
 final Map<String, String> _localFileMap = {};
 
 // Versi app saat ini — harus sama dengan versionName di build.gradle
-const _appVersion = '8.4.0';
+const _appVersion = '8.6.0';
 const _githubReleasesApi = 'https://api.github.com/repos/yusrilrizky121-code/Auspoty/releases/latest';
 
 void main() async {
@@ -66,6 +66,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   bool _updateChecked = false;
   DateTime? _lastBack;
   Timer? _progressTimer;
+  Timer? _onlineCheckTimer;
 
   // just_audio player untuk playback file lokal (offline)
   final AudioPlayer _localPlayer = AudioPlayer();
@@ -86,6 +87,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     _progressTimer?.cancel();
     _localProgressTimer?.cancel();
     _localPlayerSub?.cancel();
+    _onlineCheckTimer?.cancel();
     _localPlayer.dispose();
     super.dispose();
   }
@@ -176,6 +178,23 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   }
 
   void _startProgressTimer() {}
+
+  // Cek koneksi internet secara periodik saat offline — auto reload saat kembali online
+  void _startOnlineCheck() {
+    _onlineCheckTimer?.cancel();
+    _onlineCheckTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!_isOffline) { _onlineCheckTimer?.cancel(); return; }
+      try {
+        final res = await http.get(Uri.parse('$_base/api/search?query=test'))
+            .timeout(const Duration(seconds: 4));
+        if (res.statusCode == 200 && mounted) {
+          _onlineCheckTimer?.cancel();
+          setState(() { _isOffline = false; _loading = true; });
+          _wvc?.reload();
+        }
+      } catch (_) {}
+    });
+  }
 
   // Cek update dari GitHub Releases
   Future<void> _checkForUpdate() async {
@@ -1183,6 +1202,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 if (req.isForMainFrame == true) {
                   // Halaman utama gagal load = offline
                   setState(() { _loading = false; _isOffline = true; });
+                  _startOnlineCheck();
                 }
               },
               onPermissionRequest: (c, req) async =>

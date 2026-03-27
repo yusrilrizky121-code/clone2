@@ -41,13 +41,14 @@ function onPlayerStateChange(event) {
     const playPath = 'M8 5v14l11-7z', pausePath = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
     const mainBtn = document.getElementById('mainPlayBtn'), miniBtn = document.getElementById('miniPlayBtn');
     if (event.data == YT.PlayerState.PLAYING) {
+        // Pastikan flag offline di-reset saat YT mulai play
+        window._localAudioPlaying = false;
         isPlaying = true;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + pausePath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + pausePath + '"/>';
         _setArtPlaying(true);
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-        // APK mode: onMusicPlaying sudah dipanggil dari playMusic(), tidak perlu di sini
         if (!window.flutter_inappwebview) _startBgKeepAlive();
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
@@ -136,7 +137,7 @@ function playMusic(videoId, encodedData) {
     if (window._localAudioPlaying && window.flutter_inappwebview) {
         try { window.flutter_inappwebview.callHandler('stopLocalPlayer'); } catch(e) {}
     }
-    // Reset downloaded mode saat main lagu streaming
+    // Reset downloaded mode saat main lagu streaming — WAJIB sebelum startProgressBar
     window._localAudioPlaying = false;
     window._isDownloadedView = false;
     // Pastikan icon di daftar unduhan kembali ke "play"
@@ -262,18 +263,14 @@ function startProgressBar() {
         if (!modalVis && !miniVis) return;
 
         var cur = 0, dur = 0;
-        // Cek bgAudio (legacy) atau gunakan progress dari Dart via _localAudioPlaying flag
-        var au = window._localAudioPlaying ? document.getElementById('bgAudio') : null;
-        if (au && !isNaN(au.duration) && au.duration > 0) {
-            cur = au.currentTime;
-            dur = au.duration;
-        } else if (!window._localAudioPlaying && ytPlayer && ytPlayer.getCurrentTime) {
+        // Saat _localAudioPlaying=true, progress diupdate dari Dart timer langsung ke DOM
+        // JS progress bar tidak perlu jalan — skip
+        if (window._localAudioPlaying) return;
+        if (ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
             dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-        } else {
-            // Saat _localAudioPlaying=true, progress diupdate dari Dart timer — skip di sini
-            return;
         }
+        if (dur <= 0) return;
         var pct = (cur / dur) * 100;
         if (Math.abs(pct - _lastPct) < 0.25) return;
         _lastPct = pct;
@@ -565,7 +562,8 @@ function playDownloadedSong(videoId, title, artist, img) {
         navigator.mediaSession.setActionHandler('nexttrack', playNextDownloadedSong);
         navigator.mediaSession.setActionHandler('previoustrack', playPrevDownloadedSong);
     }
-    startProgressBar();
+    // JANGAN panggil startProgressBar() di sini — progress diupdate dari Dart timer
+    // startProgressBar() hanya untuk ytPlayer (streaming)
     if (window.flutter_inappwebview) {
         try {
             window.flutter_inappwebview.callHandler('playLocalFile', title, artist, img, videoId);
@@ -927,59 +925,93 @@ async function viewUserProfile(email) {
     if (searchModal) searchModal.style.display = 'none';
     
     switchView('user-profile');
-    document.getElementById('upvName').innerText = 'Memuat...';
-    document.getElementById('upvEmail').innerText = email;
-    document.getElementById('upvAvatar').innerHTML = '';
-    document.getElementById('upvAvatar').innerText = '?';
+    
+    // Set loading state
+    const nameEl = document.getElementById('upvName');
+    const emailEl = document.getElementById('upvEmail');
+    const avatarEl = document.getElementById('upvAvatar');
+    const followersEl = document.getElementById('upvFollowers');
+    const followingEl = document.getElementById('upvFollowing');
     const actEl = document.getElementById('upvActivity');
+    const btnFollow = document.getElementById('btnFollowUser');
+    const btnMsg = document.getElementById('btnMessageUser');
+    
+    if (nameEl) nameEl.innerText = 'Memuat...';
+    if (emailEl) emailEl.innerText = email;
+    if (avatarEl) { avatarEl.innerHTML = ''; avatarEl.innerText = '?'; }
+    if (followersEl) followersEl.innerText = '0';
+    if (followingEl) followingEl.innerText = '0';
     if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Memuat aktivitas...</div>';
+    if (btnFollow) btnFollow.style.display = 'none';
+    if (btnMsg) btnMsg.style.display = 'none';
+    
+    // Tunggu Firestore siap
+    let retries = 0;
+    while (!window._firestoreDB && retries < 10) {
+        await new Promise(r => setTimeout(r, 300));
+        retries++;
+    }
+    
+    if (!window._firestoreDB) {
+        if (nameEl) nameEl.innerText = email.split('@')[0];
+        if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Firestore belum siap, coba lagi.</div>';
+        window._viewingUser = { email, name: email.split('@')[0] };
+        return;
+    }
     
     try {
         const db_fs = window._firestoreDB;
-        if (!db_fs) { document.getElementById('upvName').innerText = 'Firestore belum aktif'; return; }
         const q = window._fsQuery(window._fsCollection(db_fs, 'users'), window._fsWhere('email', '==', email));
         const snap = await window._fsGetDocs(q);
+        
+        let u;
         if (!snap.empty) {
-            const u = snap.docs[0].data();
-            document.getElementById('upvName').innerText = u.name || email.split('@')[0];
-            document.getElementById('upvEmail').innerText = u.username ? '@' + u.username : email;
-            if (u.picture) document.getElementById('upvAvatar').innerHTML = '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">';
-            else { document.getElementById('upvAvatar').innerHTML = ''; document.getElementById('upvAvatar').innerText = (u.name || 'U').charAt(0).toUpperCase(); }
-            document.getElementById('upvFollowers').innerText = (u.followers || []).length;
-            document.getElementById('upvFollowing').innerText = (u.following || []).length;
-            const currentUser = getGoogleUser();
-            const isFollowing = currentUser && (u.followers || []).includes(currentUser.email);
-            const btn = document.getElementById('btnFollowUser');
-            if (btn) {
-                btn.style.display = (currentUser && currentUser.email !== email) ? 'inline-block' : 'none';
-                btn.innerText = isFollowing ? 'Diikuti' : 'Ikuti';
-                btn.style.background = isFollowing ? 'rgba(255,255,255,0.1)' : 'white';
-                btn.style.color = isFollowing ? 'white' : 'black';
-            }
-            const msgBtn = document.getElementById('btnMessageUser');
-            if (msgBtn) msgBtn.style.display = (currentUser && currentUser.email !== email) ? 'inline-block' : 'none';
-            window._viewingUser = u;
-            
-            // Load aktivitas: riwayat lagu & lagu disukai dari Firestore
-            _loadUserActivity(email, u);
+            u = snap.docs[0].data();
         } else {
-            const displayName = email.split('@')[0];
-            document.getElementById('upvName').innerText = displayName;
-            document.getElementById('upvEmail').innerText = email;
-            document.getElementById('upvAvatar').innerHTML = '';
-            document.getElementById('upvAvatar').innerText = displayName.charAt(0).toUpperCase();
-            document.getElementById('upvFollowers').innerText = '0';
-            document.getElementById('upvFollowing').innerText = '0';
-            const btn = document.getElementById('btnFollowUser');
-            if (btn) btn.style.display = 'none';
-            const msgBtn = document.getElementById('btnMessageUser');
-            if (msgBtn) msgBtn.style.display = 'none';
-            window._viewingUser = { email, name: displayName };
-            if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>';
+            // User belum ada di Firestore — tampilkan data minimal
+            u = { email, name: email.split('@')[0], picture: '', followers: [], following: [], username: '' };
         }
+        
+        const displayName = u.name || email.split('@')[0];
+        if (nameEl) nameEl.innerText = displayName;
+        if (emailEl) emailEl.innerText = u.username ? '@' + u.username : email;
+        
+        if (avatarEl) {
+            if (u.picture) {
+                avatarEl.innerHTML = '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">';
+            } else {
+                avatarEl.innerHTML = '';
+                avatarEl.innerText = displayName.charAt(0).toUpperCase();
+            }
+        }
+        
+        if (followersEl) followersEl.innerText = (u.followers || []).length;
+        if (followingEl) followingEl.innerText = (u.following || []).length;
+        
+        const currentUser = getGoogleUser();
+        const isFollowing = currentUser && (u.followers || []).includes(currentUser.email);
+        const isOtherUser = currentUser && currentUser.email !== email;
+        
+        if (btnFollow) {
+            btnFollow.style.display = isOtherUser ? 'inline-block' : 'none';
+            btnFollow.innerText = isFollowing ? 'Diikuti' : 'Ikuti';
+            btnFollow.style.background = isFollowing ? 'rgba(255,255,255,0.1)' : 'white';
+            btnFollow.style.color = isFollowing ? 'white' : 'black';
+        }
+        if (btnMsg) {
+            btnMsg.style.display = isOtherUser ? 'inline-block' : 'none';
+        }
+        
+        window._viewingUser = u;
+        
+        // Load aktivitas
+        _loadUserActivity(email, u);
+        
     } catch(e) {
-        document.getElementById('upvName').innerText = 'Gagal memuat';
         console.error('viewUserProfile error:', e);
+        if (nameEl) nameEl.innerText = email.split('@')[0];
+        if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Gagal memuat profil.</div>';
+        window._viewingUser = { email, name: email.split('@')[0] };
     }
 }
 
@@ -987,8 +1019,10 @@ async function _loadUserActivity(email, userData) {
     const actEl = document.getElementById('upvActivity');
     if (!actEl) return;
     try {
-        // Ambil komentar terbaru user sebagai proxy aktivitas
         const db_fs = window._firestoreDB;
+        if (!db_fs) { actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>'; return; }
+        
+        // Ambil komentar terbaru user
         const qComments = window._fsQuery(
             window._fsCollection(db_fs, 'comments'),
             window._fsWhere('email', '==', email)
@@ -998,41 +1032,46 @@ async function _loadUserActivity(email, userData) {
             const ta = a.createdAt ? a.createdAt.seconds : 0;
             const tb = b.createdAt ? b.createdAt.seconds : 0;
             return tb - ta;
-        }).slice(0, 5);
+        }).slice(0, 3);
         
-        // Ambil history dari userData jika ada
+        // Ambil history & liked dari userData Firestore
         const history = userData.recentHistory || [];
         const likedSongs = userData.likedSongs || [];
         
         let html = '';
+        
         if (history.length > 0) {
-            html += '<div style="font-size:12px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:0 16px 8px;">Lagu Terakhir Diputar</div>';
+            html += '<div style="font-size:11px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:12px 16px 6px;font-weight:700;">Lagu Terakhir Diputar</div>';
             html += history.slice(0, 3).map(t =>
-                '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
-                '<img loading="lazy" class="v-img" src="' + (t.img || '') + '">' +
+                '<div class="v-item" onclick="playMusicById(\'' + (t.videoId||'') + '\')" style="cursor:pointer;">' +
+                '<img loading="lazy" class="v-img" src="' + (t.img || 'https://via.placeholder.com/48x48?text=music') + '">' +
                 '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>'
             ).join('');
         }
+        
         if (likedSongs.length > 0) {
-            html += '<div style="font-size:12px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:8px 16px;">Lagu yang Disukai</div>';
+            html += '<div style="font-size:11px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:12px 16px 6px;font-weight:700;">Lagu yang Disukai</div>';
             html += likedSongs.slice(0, 3).map(t =>
-                '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
-                '<img loading="lazy" class="v-img" src="' + (t.img || '') + '">' +
+                '<div class="v-item" onclick="playMusicById(\'' + (t.videoId||'') + '\')" style="cursor:pointer;">' +
+                '<img loading="lazy" class="v-img" src="' + (t.img || 'https://via.placeholder.com/48x48?text=music') + '">' +
                 '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>'
             ).join('');
         }
+        
         if (comments.length > 0) {
-            html += '<div style="font-size:12px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:8px 16px;">Komentar Terbaru</div>';
+            html += '<div style="font-size:11px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:12px 16px 6px;font-weight:700;">Komentar Terbaru</div>';
             html += comments.map(c =>
                 '<div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.05);">' +
-                '<div style="font-size:13px;color:white;">' + (c.text || '') + '</div>' +
+                '<div style="font-size:13px;color:white;line-height:1.5;">' + (c.text || '') + '</div>' +
                 '<div style="font-size:11px;color:var(--text-sub);margin-top:4px;">' + (c.createdAt ? new Date(c.createdAt.seconds * 1000).toLocaleDateString('id-ID') : '') + '</div>' +
                 '</div>'
             ).join('');
         }
+        
         if (!html) html = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>';
         actEl.innerHTML = html;
     } catch(e) {
+        console.error('_loadUserActivity error:', e);
         if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>';
     }
 }
@@ -1226,6 +1265,24 @@ function toggleLike() {
             const btn2 = document.getElementById('btnLikeLyric'); if (btn2) btn2.style.fill = 'var(--spotify-green)';
         }
         renderLibraryUI();
+        // Sync liked songs ke Firestore untuk aktivitas profil
+        _syncLikedSongsToFirestore();
+    };
+}
+
+function _syncLikedSongsToFirestore() {
+    const user = getGoogleUser();
+    if (!user || !db || !window._firestoreDB) return;
+    const tx = db.transaction('liked_songs', 'readonly');
+    tx.objectStore('liked_songs').getAll().onsuccess = async (e) => {
+        const liked = (e.target.result || []).slice(0, 20); // max 20
+        try {
+            await window._fsSetDoc(
+                window._fsDoc(window._firestoreDB, 'users', user.email),
+                { likedSongs: liked },
+                { merge: true }
+            );
+        } catch(err) { /* silent */ }
     };
 }
 
@@ -1665,17 +1722,22 @@ async function toggleLikeComment(id) {
         const docSnap = await window._fsGetDoc(docRef);
         if (!docSnap.exists()) { showToast('Komentar tidak ditemukan'); return; }
         const data = docSnap.data();
-        let likes = data.likes || [];
+        let likes = Array.isArray(data.likes) ? [...data.likes] : [];
         const alreadyLiked = likes.includes(user.email);
         if (alreadyLiked) {
             likes = likes.filter(e => e !== user.email);
         } else {
             likes.push(user.email);
         }
-        await window._fsUpdateDoc(docRef, { likes: likes });
+        // Pakai setDoc+merge sebagai fallback jika updateDoc bermasalah
+        try {
+            await window._fsUpdateDoc(docRef, { likes: likes });
+        } catch(e2) {
+            await window._fsSetDoc(docRef, { likes: likes }, { merge: true });
+        }
         if (currentTrack) loadComments(currentTrack.videoId);
     } catch(e) {
-        showToast('Gagal memberi like');
+        showToast('Gagal memberi like: ' + (e.message || e));
         console.error('toggleLikeComment error:', e);
     }
 }
@@ -1900,7 +1962,6 @@ async function syncUserProfile() {
     if (!user || !window._firestoreDB) return;
     try {
         const ref = window._fsDoc(window._firestoreDB, 'users', user.email);
-        // Cek apakah sudah ada username
         const existing = await window._fsGetDoc(ref);
         const existingData = existing.exists() ? existing.data() : {};
         // Ambil history lokal untuk disimpan ke profil (aktivitas publik)
@@ -1910,11 +1971,9 @@ async function syncUserProfile() {
             name: user.name,
             picture: user.picture || '',
             updatedAt: window._fsTimestamp(),
-            // Jangan overwrite username jika sudah ada
             username: existingData.username || '',
             recentHistory: localHistory
         }, { merge: true });
-        // Invalidate cache supaya search bisa menemukan user ini
         _usersCacheLoaded = false;
         _usersCache = null;
     } catch(e) { console.error('syncUserProfile error:', e); }

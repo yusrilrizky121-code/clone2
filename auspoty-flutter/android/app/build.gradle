@@ -39,8 +39,8 @@ android {
         applicationId "com.auspoty.app"
         minSdkVersion flutter.minSdkVersion
         targetSdk 36
-        versionCode 18
-        versionName "8.4.0"
+        versionCode 19
+        versionName "8.6.0"
         multiDexEnabled true
     }
 
