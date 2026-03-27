@@ -59,9 +59,16 @@ img {
 }
 /* Chat view butuh flex */
 #view-chat.active { display: flex; flex-direction: column; }
-/* Saat di chat view, mini player tidak perlu tampil (input sudah di atas nav) */
-#view-chat.active ~ #miniPlayer,
-body:has(#view-chat.active) .mini-player { display: none !important; }
+/* Chat view: full height, input di bawah, ikut keyboard */
+#view-chat.active {
+    height: 100dvh; /* dynamic viewport height — ikut keyboard */
+    overflow: hidden;
+}
+#chatMessages {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
 
 /* ===== TOUCH — no 300ms delay on all tappables ===== */
 a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
@@ -71,10 +78,6 @@ a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
 .lyrics-back-btn, .cp-btn, #downloadBtn, #downloadBtnMini {
     touch-action: manipulation;
     cursor: pointer;
-}
-/* h-card di dalam horizontal scroll — izinkan scroll vertikal halaman */
-.h-card {
-    touch-action: pan-y;
 }
 
 /* ===== HOME HEADER ===== */
@@ -137,6 +140,8 @@ a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
     gap: 14px; padding: 0 20px 8px;
     -webkit-overflow-scrolling: touch;
     transform: translateZ(0);
+    /* Izinkan scroll vertikal halaman saat jari di area ini */
+    overscroll-behavior-x: contain;
 }
 .horizontal-scroll::-webkit-scrollbar { display: none; }
 .h-card { width: 140px; flex-shrink: 0; scroll-snap-align: start; }

@@ -1228,6 +1228,8 @@ async function toggleFollowUser() {
 
 // MESSAGING
 let _chatInterval = null;
+let _chatKeyboardHandler = null;
+
 function openChatWithUser() {
     const targetUser = window._viewingUser; if (!targetUser) return;
     const currentUser = getGoogleUser(); if (!currentUser) { showToast('Login dulu untuk berkirim pesan'); return; }
@@ -1270,6 +1272,15 @@ function openChatWithUser() {
             }).catch(() => {});
         }
     }, 10000);
+    // Handle keyboard — scroll chatMessages ke bawah saat keyboard muncul
+    if (window.visualViewport) {
+        if (_chatKeyboardHandler) window.visualViewport.removeEventListener('resize', _chatKeyboardHandler);
+        _chatKeyboardHandler = function() {
+            var msgs = document.getElementById('chatMessages');
+            if (msgs) setTimeout(function() { msgs.scrollTop = msgs.scrollHeight; }, 100);
+        };
+        window.visualViewport.addEventListener('resize', _chatKeyboardHandler);
+    }
 }
 
 async function loadChatMessages(otherEmail) {
