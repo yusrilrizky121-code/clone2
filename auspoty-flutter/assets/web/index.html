@@ -108,15 +108,20 @@
             sub: user.uid || '',
           };
           localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+          window._manualAuth = true;
           if (typeof updateProfileUI === 'function') updateProfileUI();
           if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
           if (typeof _hideAuthScreen === 'function') _hideAuthScreen();
           if (typeof loadHomeData === 'function' && !window._homeLoaded) { window._homeLoaded = true; loadHomeData(); }
         } else {
-          // Hanya tampilkan auth screen jika bukan manual auth (Firestore-based)
+          // user = null dari Firebase — JANGAN hapus localStorage
+          // karena user mungkin login via email/password Firestore (bukan Firebase Auth)
+          // Hanya tampilkan auth screen kalau memang belum ada data login sama sekali
           if (!window._manualAuth) {
-            localStorage.removeItem('auspotyGoogleUser');
-            if (typeof _showAuthScreen === 'function') _showAuthScreen();
+            const existing = localStorage.getItem('auspotyGoogleUser');
+            if (!existing) {
+              if (typeof _showAuthScreen === 'function') _showAuthScreen();
+            }
           }
         }
       });
