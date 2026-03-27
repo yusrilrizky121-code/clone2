@@ -1196,14 +1196,40 @@ function openChatWithUser() {
     switchView('chat');
     const chatName = document.getElementById('chatName');
     const chatAvatar = document.getElementById('chatAvatar');
+    const chatStatus = document.getElementById('chatStatus');
     if (chatName) chatName.innerText = _dmTarget.name;
     if (chatAvatar) {
-        if (targetUser.picture) chatAvatar.innerHTML = '<img src="' + targetUser.picture + '" style="width:100%;height:100%;object-fit:cover;">';
-        else { chatAvatar.innerHTML = ''; chatAvatar.innerText = _dmTarget.name.charAt(0).toUpperCase(); }
+        if (targetUser.picture && !targetUser.picture.startsWith('data:')) {
+            chatAvatar.innerHTML = '<img src="' + targetUser.picture + '" style="width:100%;height:100%;object-fit:cover;">';
+        } else { chatAvatar.innerHTML = ''; chatAvatar.innerText = _dmTarget.name.charAt(0).toUpperCase(); }
+    }
+    // Cek status online target user
+    if (chatStatus && window._firestoreDB) {
+        window._fsGetDoc(window._fsDoc(window._firestoreDB, 'users', targetUser.email)).then(snap => {
+            if (snap.exists()) {
+                const u = snap.data();
+                const online = _isUserOnline(u);
+                chatStatus.innerText = online ? '● Online' : '○ Offline';
+                chatStatus.style.color = online ? 'var(--spotify-green)' : 'rgba(255,255,255,0.4)';
+            }
+        }).catch(() => {});
     }
     loadDMMessages();
     if (_chatInterval) clearInterval(_chatInterval);
-    _chatInterval = setInterval(() => loadDMMessages(), 5000);
+    _chatInterval = setInterval(() => {
+        loadDMMessages();
+        // Refresh status setiap 30 detik
+        if (chatStatus && window._firestoreDB) {
+            window._fsGetDoc(window._fsDoc(window._firestoreDB, 'users', targetUser.email)).then(snap => {
+                if (snap.exists()) {
+                    const u = snap.data();
+                    const online = _isUserOnline(u);
+                    chatStatus.innerText = online ? '● Online' : '○ Offline';
+                    chatStatus.style.color = online ? 'var(--spotify-green)' : 'rgba(255,255,255,0.4)';
+                }
+            }).catch(() => {});
+        }
+    }, 5000);
 }
 
 async function loadChatMessages(otherEmail) {
@@ -1874,12 +1900,14 @@ document.addEventListener('DOMContentLoaded', function() {
 function _checkAuthAndInit() {
     const user = getGoogleUser();
     if (user && user.email) {
-        // Sudah login — langsung masuk app
         _hideAuthScreen();
         updateProfileUI();
         loadHomeData();
+        // Mulai update status online
+        setTimeout(_startOnlineStatus, 2000);
+        _lastMsgCheck = Date.now();
+        _startMsgNotifPolling();
     } else {
-        // Belum login — tampilkan auth screen
         _showAuthScreen();
     }
 }
@@ -1931,7 +1959,7 @@ function _authSetLoading(btnId, loading) {
 }
 
 function _authSuccess(userData) {
-    window._manualAuth = true; // Cegah onAuthStateChanged reset auth screen
+    window._manualAuth = true;
     localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
     _hideAuthScreen();
     window._homeLoaded = true;
@@ -1941,6 +1969,8 @@ function _authSuccess(userData) {
     showToast('Selamat datang, ' + (userData.name || '').split(' ')[0] + '!');
     _lastMsgCheck = Date.now();
     _startMsgNotifPolling();
+    // Mulai update status online
+    setTimeout(_startOnlineStatus, 2000);
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
     }
@@ -2340,7 +2370,7 @@ async function loadDMMessages() {
             const radius = isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px';
             let content = '';
             if (msg.photo) {
-                content += '<img src="' + msg.photo + '" style="max-width:200px;max-height:200px;border-radius:10px;display:block;margin-bottom:' + (msg.text ? '6px' : '0') + ';cursor:pointer;" onclick="window.open(this.src)">';
+                content += '<img src="' + msg.photo + '" style="max-width:200px;max-height:200px;border-radius:10px;display:block;margin-bottom:' + (msg.text ? '6px' : '0') + ';cursor:pointer;" onclick="_viewPhoto(this.src)">';
             }
             if (msg.text) {
                 content += '<p style="font-size:14px;color:white;margin:0 0 4px;word-break:break-word;">' + msg.text + '</p>';
@@ -2381,6 +2411,53 @@ async function sendDM() {
 
 // ── FOTO DI CHAT ─────────────────────────────────────────────────────────────
 window._chatPendingPhoto = null;
+
+// ── PHOTO VIEWER — fullscreen tap foto di chat ────────────────────────────
+function _viewPhoto(src) {
+    var modal = document.getElementById('photoViewerModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'photoViewerModal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;';
+        modal.onclick = function() { modal.style.display = 'none'; };
+        var img = document.createElement('img');
+        img.id = 'photoViewerImg';
+        img.style.cssText = 'max-width:95vw;max-height:90vh;border-radius:8px;object-fit:contain;';
+        modal.appendChild(img);
+        document.body.appendChild(modal);
+    }
+    document.getElementById('photoViewerImg').src = src;
+    modal.style.display = 'flex';
+}
+
+// ── STATUS ONLINE/OFFLINE ─────────────────────────────────────────────────
+let _onlineStatusInterval = null;
+
+function _startOnlineStatus() {
+    _updateLastSeen();
+    if (_onlineStatusInterval) clearInterval(_onlineStatusInterval);
+    _onlineStatusInterval = setInterval(_updateLastSeen, 30000);
+}
+
+async function _updateLastSeen() {
+    const me = getGoogleUser();
+    if (!me || !window._firestoreDB) return;
+    try {
+        await window._fsSetDoc(
+            window._fsDoc(window._firestoreDB, 'users', me.email),
+            { lastSeen: window._fsTimestamp(), online: true },
+            { merge: true }
+        );
+    } catch(e) {}
+}
+
+function _isUserOnline(userData) {
+    if (userData && userData.lastSeen) {
+        const lastSeen = userData.lastSeen.seconds * 1000;
+        return (Date.now() - lastSeen) < 120000;
+    }
+    return false;
+}
 
 function onChatPhotoSelected(input) {
     const file = input.files[0];
@@ -2489,12 +2566,54 @@ function _onBackOnline() {
     showToast('Kembali online! Memuat ulang...');
     setTimeout(function() {
         loadHomeData();
-        if (currentTrack && !window._localAudioPlaying) {
-            if (ytPlayer && ytPlayer.loadVideoById && _ytPlayerReady) {
-                ytPlayer.loadVideoById(currentTrack.videoId);
+        // Reset ytPlayer agar bisa play lagu baru setelah online
+        // Jangan coba reload lagu lama — biarkan user pilih sendiri
+        // Tapi pastikan ytPlayer siap
+        if (ytPlayer && typeof ytPlayer.getPlayerState === 'function') {
+            try {
+                var state = ytPlayer.getPlayerState();
+                // -1 = unstarted, 5 = video cued — player masih hidup
+                if (state === -1 || state === 5 || state === 2) {
+                    _ytPlayerReady = true;
+                }
+            } catch(e) {
+                // Player mati — reload YT API
+                _ytPlayerReady = false;
+                _reloadYTPlayer();
             }
+        } else {
+            _reloadYTPlayer();
         }
     }, 1200);
+}
+
+function _reloadYTPlayer() {
+    // Reload YT iframe API jika player mati setelah offline
+    if (typeof YT !== 'undefined' && YT.Player) {
+        try {
+            if (ytPlayer && ytPlayer.destroy) ytPlayer.destroy();
+        } catch(e) {}
+        ytPlayer = null;
+        _ytPlayerReady = false;
+        var container = document.getElementById('youtube-player');
+        if (container) container.innerHTML = '';
+        // Re-init player
+        ytPlayer = new YT.Player('youtube-player', {
+            height: '0', width: '0',
+            playerVars: { playsinline: 1, rel: 0 },
+            events: {
+                onReady: function() {
+                    _ytPlayerReady = true;
+                    // Jika ada lagu yang sedang diputar sebelum offline, resume
+                    if (currentTrack && !window._localAudioPlaying && _pendingVideoId) {
+                        ytPlayer.loadVideoById(_pendingVideoId);
+                        _pendingVideoId = null;
+                    }
+                },
+                onStateChange: onPlayerStateChange
+            }
+        });
+    }
 }
 
 function _startOfflinePolling() {
