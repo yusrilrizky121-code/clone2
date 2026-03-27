@@ -34,22 +34,51 @@ let _ytPlayerReady = false;
 let _pendingVideoId = null;
 
 function onYouTubeIframeAPIReady() {
+    _initYTPlayer();
+}
+
+function _initYTPlayer() {
+    if (ytPlayer && _ytPlayerReady) return;
+    var container = document.getElementById('youtube-player');
+    if (!container) return;
+    container.innerHTML = '';
     ytPlayer = new YT.Player('youtube-player', {
         height: '0', width: '0',
-        playerVars: { playsinline: 1, rel: 0 },
+        playerVars: { playsinline: 1, rel: 0, autoplay: 0 },
         events: {
-            onReady: () => {
+            onReady: function() {
                 _ytPlayerReady = true;
-                // Play lagu yang pending jika ada
                 if (_pendingVideoId) {
-                    ytPlayer.loadVideoById(_pendingVideoId);
+                    var vid = _pendingVideoId;
                     _pendingVideoId = null;
+                    ytPlayer.loadVideoById(vid);
                 }
             },
-            onStateChange: onPlayerStateChange
+            onStateChange: onPlayerStateChange,
+            onError: function(e) {
+                // Error 150 = video tidak bisa diputar di embedded player
+                // Coba video berikutnya
+                if (e.data === 150 || e.data === 101) {
+                    if (typeof playNextSimilarSong === 'function') playNextSimilarSong();
+                }
+            }
         }
     });
 }
+
+// Fallback: jika YT API tidak load dalam 5 detik, coba load ulang
+setTimeout(function() {
+    if (!_ytPlayerReady) {
+        if (typeof YT !== 'undefined' && YT.Player) {
+            _initYTPlayer();
+        } else {
+            // YT API belum load — inject ulang script
+            var tag = document.createElement('script');
+            tag.src = 'https://www.youtube.com/iframe_api';
+            document.head.appendChild(tag);
+        }
+    }
+}, 5000);
 function onPlayerStateChange(event) {
     const playPath = 'M8 5v14l11-7z', pausePath = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
     const mainBtn = document.getElementById('mainPlayBtn'), miniBtn = document.getElementById('miniPlayBtn');
@@ -202,9 +231,12 @@ function playMusic(videoId, encodedData) {
     } else {
         // Player belum ready — queue untuk diputar saat ready
         _pendingVideoId = videoId;
-        if (!ytPlayer) {
-            // YT API belum load sama sekali — coba load ulang
-            if (typeof YT === 'undefined') {
+        if (!ytPlayer || !_ytPlayerReady) {
+            // Coba init ulang player
+            if (typeof YT !== 'undefined' && YT.Player) {
+                _initYTPlayer();
+            } else {
+                // YT API belum load — inject script
                 var tag = document.createElement('script');
                 tag.src = 'https://www.youtube.com/iframe_api';
                 document.head.appendChild(tag);
@@ -227,14 +259,20 @@ function playMusic(videoId, encodedData) {
 
 // TOGGLE PLAY
 function togglePlay() {
-    // Jika ada lagu offline aktif (downloaded), selalu delegate ke native
     if (window._localAudioPlaying) {
         if (window.flutter_inappwebview) {
             try { window.flutter_inappwebview.callHandler('toggleLocalPlay'); } catch(e) {}
         }
         return;
     }
-    if (!ytPlayer) return;
+    if (!ytPlayer || !_ytPlayerReady) {
+        // Player belum ready — coba init ulang dan play lagu yang sedang aktif
+        if (currentTrack) {
+            _pendingVideoId = currentTrack.videoId;
+            if (typeof YT !== 'undefined' && YT.Player) _initYTPlayer();
+        }
+        return;
+    }
     if (isPlaying) {
         ytPlayer.pauseVideo();
         isPlaying = false;
