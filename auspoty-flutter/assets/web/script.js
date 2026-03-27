@@ -260,6 +260,42 @@ function updatePlayPauseBtn(playing) {
 function expandPlayer() { document.getElementById('playerModal').style.display = 'flex'; }
 function minimizePlayer() { document.getElementById('playerModal').style.display = 'none'; }
 
+// ── CUPLIKAN VIDEO YT ────────────────────────────────────────────────────────
+let _videoPreviewPlayer = null;
+let _videoPreviewActive = false;
+
+function toggleVideoPreview() {
+    if (_videoPreviewActive) { closeVideoPreview(); return; }
+    if (!currentTrack) { showToast('Putar lagu dulu'); return; }
+    const overlay = document.getElementById('videoPreviewOverlay');
+    const btn = document.getElementById('btnVideoPreview');
+    if (!overlay) return;
+    overlay.style.display = 'block';
+    _videoPreviewActive = true;
+    if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" style="fill:white;width:14px;height:14px;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Video';
+    // Buat YT player baru di overlay
+    if (!_videoPreviewPlayer && typeof YT !== 'undefined' && YT.Player) {
+        _videoPreviewPlayer = new YT.Player('youtube-player-visible', {
+            videoId: currentTrack.videoId,
+            playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1 },
+            events: { onReady: (e) => e.target.playVideo() }
+        });
+    } else if (_videoPreviewPlayer && _videoPreviewPlayer.loadVideoById) {
+        _videoPreviewPlayer.loadVideoById(currentTrack.videoId);
+    }
+}
+
+function closeVideoPreview() {
+    const overlay = document.getElementById('videoPreviewOverlay');
+    const btn = document.getElementById('btnVideoPreview');
+    if (overlay) overlay.style.display = 'none';
+    _videoPreviewActive = false;
+    if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" style="fill:white;width:14px;height:14px;"><path d="M8 5v14l11-7z"/></svg> Video';
+    if (_videoPreviewPlayer && _videoPreviewPlayer.pauseVideo) {
+        try { _videoPreviewPlayer.pauseVideo(); } catch(e) {}
+    }
+}
+
 function startProgressBar() {
     stopProgressBar();
     var _bar  = document.getElementById('progressBar');
@@ -1029,8 +1065,14 @@ async function viewUserProfile(email) {
         if (emailEl) emailEl.innerText = u.username ? '@' + u.username : email;
         
         if (avatarEl) {
-            if (u.picture) avatarEl.innerHTML = '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">';
-            else { avatarEl.innerHTML = ''; avatarEl.innerText = displayName.charAt(0).toUpperCase(); }
+            // Jangan tampilkan base64 (terlalu besar) — hanya URL eksternal
+            const picUrl = u.picture && !u.picture.startsWith('data:') ? u.picture : '';
+            if (picUrl) {
+                avatarEl.innerHTML = '<img src="' + picUrl + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'\';this.parentElement.innerText=\'' + displayName.charAt(0).toUpperCase() + '\'">';
+            } else {
+                avatarEl.innerHTML = '';
+                avatarEl.innerText = displayName.charAt(0).toUpperCase();
+            }
         }
         
         if (followersEl) followersEl.innerText = (u.followers || []).length;
@@ -1638,14 +1680,17 @@ function updateProfileUI() {
     const manualPic = localStorage.getItem('auspotyProfilePhoto');
     const pic = manualPic || (user ? user.picture : '');
     
-    // Sync to Firestore users collection
+    // Sync ke Firestore — JANGAN sync foto base64 (terlalu besar, max Firestore 1MB/doc)
+    // Foto hanya disimpan di localStorage
     if (user && user.email && window._firestoreDB) {
+        // Hanya sync nama, email, dan foto URL (bukan base64)
+        const picToSync = (pic && !pic.startsWith('data:')) ? pic : (user.picture || '');
         window._fsSetDoc(window._fsDoc(window._firestoreDB, 'users', user.email), {
             name: name,
             email: user.email,
-            picture: pic,
+            picture: picToSync,
             lastSeen: window._fsTimestamp()
-        }, { merge: true }).catch(e => console.error('Sync profile error:', e));
+        }, { merge: true }).catch(() => {});
     }
 
     const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = name;
@@ -1713,7 +1758,8 @@ function renderCommentItem(d, allReplies, currentUser, isReply = false) {
     
     let html = '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;' + (isReply ? 'margin-left:40px;scale:0.95;transform-origin:left;' : '') + '">' +
         '<div onclick="' + profileClick + '" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;cursor:pointer;">' + 
-        (d.picture ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;">' : (d.name||'?').charAt(0).toUpperCase()) + '</div>' +
+        (d.picture && !d.picture.startsWith('data:') ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">' : '') +
+        (!d.picture || d.picture.startsWith('data:') ? (d.name||'?').charAt(0).toUpperCase() : '') + '</div>' +
         '<div style="flex:1;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
         '<span onclick="' + profileClick + '" style="font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">' + (d.name||'?') + badge + '</span>' +
