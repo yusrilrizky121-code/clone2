@@ -22,7 +22,7 @@ const _localHost = 'localfile.internal';
 final Map<String, String> _localFileMap = {};
 
 // Versi app saat ini — harus sama dengan versionName di build.gradle
-const _appVersion = '8.6.0';
+const _appVersion = '9.4.1';
 const _githubReleasesApi = 'https://api.github.com/repos/yusrilrizky121-code/Auspoty/releases/latest';
 
 void main() async {
@@ -467,6 +467,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     """);
 
     // Progress timer dari Dart → inject ke WebView setiap 500ms
+    _localProgressTimer?.cancel();
     _localProgressTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
       if (!_localPlaying) return;
       final pos = _localPlayer.position.inMilliseconds;
@@ -482,7 +483,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             if(!window._localAudioPlaying) return;
             var pct=${pct.toStringAsFixed(1)};
             var bar=document.getElementById('progressBar');
-            if(bar){bar.value=pct;bar.style.background='linear-gradient(to right,white '+pct+'%,rgba(255,255,255,0.2) '+pct+'%)';}
+            if(bar){bar.value=pct;}
             var pf=document.getElementById('progressFill');if(pf)pf.style.width=pct+'%';
             var mf=document.getElementById('miniProgressFill');if(mf)mf.style.width=pct+'%';
             var ct=document.getElementById('currentTime');if(ct)ct.innerText='${fmt(posSec)}';

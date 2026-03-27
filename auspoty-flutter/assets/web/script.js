@@ -238,14 +238,11 @@ function minimizePlayer() { document.getElementById('playerModal').style.display
 
 function startProgressBar() {
     stopProgressBar();
-    // Cache DOM refs once — zero getElementById in hot loop
     var _bar  = document.getElementById('progressBar');
     var _fill = document.getElementById('progressFill');
     var _mf   = document.getElementById('miniProgressFill');
     var _ct   = document.getElementById('currentTime');
     var _tt   = document.getElementById('totalTime');
-    var _modal = document.getElementById('playerModal');
-    var _mini  = document.getElementById('miniPlayer');
     var _lastPct = -1;
     var _rafId = null;
     var _lastTick = 0;
@@ -254,34 +251,26 @@ function startProgressBar() {
     function _tick(now) {
         if (!_active) return;
         _rafId = requestAnimationFrame(_tick);
-        // throttle to ~1fps — enough for progress bar
         if (now - _lastTick < 950) return;
         _lastTick = now;
-        if (_isScrolling) return;
-        var modalVis = _modal && _modal.style.display === 'flex';
-        var miniVis  = _mini  && _mini.style.display  === 'flex';
-        if (!modalVis && !miniVis) return;
-
-        var cur = 0, dur = 0;
-        // Saat _localAudioPlaying=true, progress diupdate dari Dart timer langsung ke DOM
-        // JS progress bar tidak perlu jalan — skip
+        // Saat mode offline, progress diupdate dari Dart — skip
         if (window._localAudioPlaying) return;
-        if (ytPlayer && ytPlayer.getCurrentTime) {
-            cur = ytPlayer.getCurrentTime();
-            dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-        }
+        if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+        var cur = 0, dur = 0;
+        try {
+            cur = ytPlayer.getCurrentTime() || 0;
+            dur = ytPlayer.getDuration ? (ytPlayer.getDuration() || 0) : 0;
+        } catch(e) { return; }
         if (dur <= 0) return;
         var pct = (cur / dur) * 100;
-        if (Math.abs(pct - _lastPct) < 0.25) return;
+        if (Math.abs(pct - _lastPct) < 0.1) return;
         _lastPct = pct;
         var pctStr = pct.toFixed(1) + '%';
-        if (_bar)  _bar.value = pct;
+        if (_bar)  { _bar.value = pct; }
         if (_fill) _fill.style.width = pctStr;
         if (_mf)   _mf.style.width   = pctStr;
-        if (modalVis) {
-            if (_ct) _ct.innerText = formatTime(cur);
-            if (_tt) _tt.innerText = formatTime(dur);
-        }
+        if (_ct) _ct.innerText = formatTime(cur);
+        if (_tt) _tt.innerText = formatTime(dur);
     }
     _rafId = requestAnimationFrame(_tick);
     progressInterval = {
@@ -1717,6 +1706,7 @@ async function deleteComment(id) {
 
 async function toggleLikeComment(id) {
     const user = getGoogleUser(); if (!user) { showToast('Login dulu untuk memberi Like'); return; }
+    if (!window._firestoreDB) { showToast('Firestore belum siap'); return; }
     try {
         const docRef = window._fsDoc(window._firestoreDB, 'comments', id);
         const docSnap = await window._fsGetDoc(docRef);
@@ -1729,16 +1719,19 @@ async function toggleLikeComment(id) {
         } else {
             likes.push(user.email);
         }
-        // Pakai setDoc+merge sebagai fallback jika updateDoc bermasalah
         try {
-            await window._fsUpdateDoc(docRef, { likes: likes });
+            if (typeof window._fsUpdateDoc === 'function') {
+                await window._fsUpdateDoc(docRef, { likes });
+            } else {
+                await window._fsSetDoc(docRef, { likes }, { merge: true });
+            }
         } catch(e2) {
-            await window._fsSetDoc(docRef, { likes: likes }, { merge: true });
+            await window._fsSetDoc(docRef, { likes }, { merge: true });
         }
         if (currentTrack) loadComments(currentTrack.videoId);
     } catch(e) {
-        showToast('Gagal memberi like: ' + (e.message || e));
-        console.error('toggleLikeComment error:', e);
+        showToast('Gagal like: ' + (e.message || String(e)));
+        console.error('toggleLikeComment:', e);
     }
 }
 
