@@ -221,8 +221,6 @@ a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
 .ctrl-btn:active { transform: scale(0.9); }
 #btnSubscribe svg { transition: fill 0.3s; }
 
-
-
 /* REBUILD UI FIXES */
 .search-header-container { padding-top: 20px; }
 .search-header-container h1 { margin-bottom: 8px; }
@@ -497,5 +495,3 @@ body.font-xlarge .v-title { font-size: 20px !important; } body.font-xlarge .h-ti
 
 /* ===== HIDE VERCEL TOOLBAR ===== */
 vercel-live-feedback,vercel-toolbar,#__vercel-toolbar,[data-vercel-toolbar]{display:none!important;}
-
-
