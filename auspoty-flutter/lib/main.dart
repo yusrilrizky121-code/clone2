@@ -1500,6 +1500,13 @@ class _OfflineScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Auto-buka lagu diunduh setelah 500ms
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        onOpenDownloads();
+      });
+    });
+
     return Container(
       color: const Color(0xFF0a0a0f),
       child: Center(
@@ -1513,7 +1520,7 @@ class _OfflineScreen extends StatelessWidget {
               const Text('Tidak Ada Koneksi',
                 style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              const Text('Kamu bisa tetap mendengarkan\nlagu yang sudah diunduh',
+              const Text('Memuat lagu yang sudah diunduh...',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white54, fontSize: 15, height: 1.5)),
               const SizedBox(height: 40),
