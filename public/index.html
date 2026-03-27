@@ -326,17 +326,16 @@
             <div id="chatStatus" style="font-size:11px;color:rgba(255,255,255,0.4);">○ Offline</div>
         </div>
     </div>
-    <!-- Pesan — flex:1 agar mengisi sisa ruang -->
-    <div id="chatMessages" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px;"></div>
-    <!-- Input — flex-shrink:0 agar selalu di bawah, tidak tertutup keyboard -->
-    <div id="chatInputBar" style="padding:8px 12px 8px;background:var(--bg-main);border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0;">
+    <!-- Pesan — flex:1, scroll dari atas ke bawah -->
+    <div id="chatMessages"></div>
+    <!-- Input — selalu di bawah, ikut keyboard -->
+    <div id="chatInputBar">
         <!-- Preview foto sebelum kirim -->
         <div id="chatPhotoPreview" style="display:none;margin-bottom:8px;position:relative;">
             <img id="chatPhotoImg" style="max-height:120px;border-radius:12px;object-fit:cover;">
             <button onclick="cancelChatPhoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);border:none;border-radius:50%;width:24px;height:24px;color:white;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
         </div>
         <div style="display:flex;gap:8px;align-items:flex-end;background:rgba(255,255,255,0.06);border-radius:20px;padding:6px 6px 6px 12px;">
-            <!-- Tombol foto -->
             <label for="chatPhotoInput" style="cursor:pointer;flex-shrink:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,0.08);">
                 <svg viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.6);width:18px;height:18px;"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
             </label>

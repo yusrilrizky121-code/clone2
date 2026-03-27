@@ -71,8 +71,18 @@ img {
 #chatMessages {
     flex: 1;
     overflow-y: auto;
-    min-height: 0; /* penting agar flex child bisa shrink */
+    min-height: 0;
     -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 16px;
+    gap: 8px;
+}
+#chatInputBar {
+    flex-shrink: 0;
+    background: var(--bg-main);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 8px 12px 8px;
 }
 
 /* ===== TOUCH — no 300ms delay on all tappables ===== */

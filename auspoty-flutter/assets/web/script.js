@@ -658,9 +658,9 @@ function renderDownloadedVItem(t) {
     return '<div class="v-item" id="dl-item-' + vid + '">' +
         '<img loading="lazy" class="v-img" src="' + img + '" onclick="playDownloadedSong(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')">' +
         '<div class="v-info" onclick="playDownloadedSong(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div>' +
-        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">' +
-        '<svg id="dl-playbtn-' + vid + '" onclick="event.stopPropagation();_dlToggle(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')" viewBox="0 0 24 24" style="fill:' + iconColor + ';width:24px;height:24px;cursor:pointer;"><path d="' + iconPath + '"/></svg>' +
-        '<svg onclick="event.stopPropagation();deleteDownloadedSong(\'' + vid + '\')" viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.35);width:20px;height:20px;cursor:pointer;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+        '<div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">' +
+        '<svg id="dl-playbtn-' + vid + '" onclick="event.stopPropagation();_dlToggle(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')" viewBox="0 0 24 24" style="fill:' + iconColor + ';width:36px;height:36px;cursor:pointer;"><path d="' + iconPath + '"/></svg>' +
+        '<svg onclick="event.stopPropagation();deleteDownloadedSong(\'' + vid + '\')" viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.45);width:30px;height:30px;cursor:pointer;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
         '</div></div>';
 }
 
