@@ -430,6 +430,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         window.currentTrack = {videoId:'$safeVid',title:'$safeTitle',artist:'$safeArtist',img:'$safeImg'};
         if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
         if(typeof _setArtPlaying==='function') _setArtPlaying(true);
+        if(typeof stopProgressBar==='function') stopProgressBar();
         var mp=document.getElementById('miniPlayer');if(mp)mp.style.display='flex';
         var mpi=document.getElementById('miniPlayerImg');if(mpi)mpi.src='$safeImg';
         var mpt=document.getElementById('miniPlayerTitle');if(mpt)mpt.innerText='$safeTitle';

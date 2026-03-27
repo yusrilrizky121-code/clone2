@@ -202,8 +202,8 @@ function playMusic(videoId, encodedData) {
 
 // TOGGLE PLAY
 function togglePlay() {
-    // Jika sedang di downloaded view atau ada lagu offline aktif
-    if (window._localAudioPlaying || window._isDownloadedView) {
+    // Jika ada lagu offline aktif (downloaded), selalu delegate ke native
+    if (window._localAudioPlaying) {
         if (window.flutter_inappwebview) {
             try { window.flutter_inappwebview.callHandler('toggleLocalPlay'); } catch(e) {}
         }
@@ -228,8 +228,7 @@ function updatePlayPauseBtn(playing) {
     const mainBtn = document.getElementById('mainPlayBtn'), miniBtn = document.getElementById('miniPlayBtn');
     if (mainBtn) mainBtn.innerHTML = '<path d="' + (playing ? pausePath : playPath) + '"/>';
     if (miniBtn) miniBtn.innerHTML = '<path d="' + (playing ? pausePath : playPath) + '"/>';
-    // Refresh icon di daftar lagu diunduh — jangan tergantung view flag
-    // (user bisa toggle play dari mini player walau sudah pindah view)
+    isPlaying = playing;
     _refreshDownloadedIcons(playing);
 }
 
@@ -263,15 +262,18 @@ function startProgressBar() {
         if (!modalVis && !miniVis) return;
 
         var cur = 0, dur = 0;
+        // Cek bgAudio (legacy) atau gunakan progress dari Dart via _localAudioPlaying flag
         var au = window._localAudioPlaying ? document.getElementById('bgAudio') : null;
         if (au && !isNaN(au.duration) && au.duration > 0) {
             cur = au.currentTime;
             dur = au.duration;
-        } else if (ytPlayer && ytPlayer.getCurrentTime) {
+        } else if (!window._localAudioPlaying && ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
             dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        } else {
+            // Saat _localAudioPlaying=true, progress diupdate dari Dart timer — skip di sini
+            return;
         }
-        if (dur <= 0) return;
         var pct = (cur / dur) * 100;
         if (Math.abs(pct - _lastPct) < 0.25) return;
         _lastPct = pct;
@@ -300,7 +302,14 @@ function stopProgressBar() {
     progressInterval = null;
 }
 function seekTo(value) {
-    var au = window._localAudioPlaying ? document.getElementById('bgAudio') : null;
+    // Saat lagu offline aktif, delegate seek ke Dart
+    if (window._localAudioPlaying) {
+        if (window.flutter_inappwebview) {
+            try { window.flutter_inappwebview.callHandler('seekLocalTo', value); } catch(e) {}
+        }
+        return;
+    }
+    var au = document.getElementById('bgAudio');
     if (au && !isNaN(au.duration) && au.duration > 0) {
         au.currentTime = value / 100 * au.duration;
         return;
@@ -883,11 +892,18 @@ async function doUserSearch(q) {
     el.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Mencari pengguna...</div>';
     try {
         const users = await _ensureUsersCache();
-        const ql = (q || '').toLowerCase();
-        const usersFiltered = users.filter(u => 
-            (u.name || '').toLowerCase().includes(ql) ||
-            (u.email || '').toLowerCase().includes(ql)
-        );
+        // Support @username search — strip @ prefix
+        const rawQ = (q || '').trim();
+        const isTagSearch = rawQ.startsWith('@');
+        const ql = isTagSearch ? rawQ.slice(1).toLowerCase() : rawQ.toLowerCase();
+        const usersFiltered = users.filter(u => {
+            if (isTagSearch) {
+                return (u.username || '').toLowerCase().includes(ql);
+            }
+            return (u.name || '').toLowerCase().includes(ql) ||
+                   (u.email || '').toLowerCase().includes(ql) ||
+                   (u.username || '').toLowerCase().includes(ql);
+        });
         
         // Limit to reduce UI jank on large datasets
         const usersTop = usersFiltered.slice(0, 40);
@@ -895,8 +911,8 @@ async function doUserSearch(q) {
             el.innerHTML = usersTop.map(u => 
                 '<div class="v-item" onclick="viewUserProfile(\'' + u.email + '\')">' +
                 '<div style="width:48px;height:48px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;overflow:hidden;flex-shrink:0;">' + 
-                (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : u.name.charAt(0).toUpperCase()) + '</div>' +
-                '<div class="v-info"><div class="v-title">' + u.name + '</div><div class="v-sub">' + u.email + '</div></div></div>'
+                (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : (u.name||'?').charAt(0).toUpperCase()) + '</div>' +
+                '<div class="v-info"><div class="v-title">' + (u.name||'') + (u.username ? ' <span style="color:var(--accent);font-size:12px;">@' + u.username + '</span>' : '') + '</div><div class="v-sub">' + u.email + '</div></div></div>'
             ).join('');
         } else {
             el.innerHTML = '<div style="color:var(--text-sub);padding:16px;text-align:center;">Tidak ada pengguna ditemukan untuk "' + q + '"</div>';
@@ -906,11 +922,17 @@ async function doUserSearch(q) {
 
 async function viewUserProfile(email) {
     if (!email) return;
+    // Tutup modal pencarian jika terbuka
+    const searchModal = document.getElementById('searchUsersModal');
+    if (searchModal) searchModal.style.display = 'none';
+    
     switchView('user-profile');
     document.getElementById('upvName').innerText = 'Memuat...';
     document.getElementById('upvEmail').innerText = email;
     document.getElementById('upvAvatar').innerHTML = '';
     document.getElementById('upvAvatar').innerText = '?';
+    const actEl = document.getElementById('upvActivity');
+    if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Memuat aktivitas...</div>';
     
     try {
         const db_fs = window._firestoreDB;
@@ -934,11 +956,12 @@ async function viewUserProfile(email) {
                 btn.style.background = isFollowing ? 'rgba(255,255,255,0.1)' : 'white';
                 btn.style.color = isFollowing ? 'white' : 'black';
             }
-            const dmBtn = document.getElementById('btnDMUser');
-            if (dmBtn) {
-                dmBtn.style.display = (currentUser && currentUser.email !== email) ? 'inline-block' : 'none';
-            }
+            const msgBtn = document.getElementById('btnMessageUser');
+            if (msgBtn) msgBtn.style.display = (currentUser && currentUser.email !== email) ? 'inline-block' : 'none';
             window._viewingUser = u;
+            
+            // Load aktivitas: riwayat lagu & lagu disukai dari Firestore
+            _loadUserActivity(email, u);
         } else {
             const displayName = email.split('@')[0];
             document.getElementById('upvName').innerText = displayName;
@@ -949,11 +972,68 @@ async function viewUserProfile(email) {
             document.getElementById('upvFollowing').innerText = '0';
             const btn = document.getElementById('btnFollowUser');
             if (btn) btn.style.display = 'none';
+            const msgBtn = document.getElementById('btnMessageUser');
+            if (msgBtn) msgBtn.style.display = 'none';
             window._viewingUser = { email, name: displayName };
+            if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>';
         }
     } catch(e) {
         document.getElementById('upvName').innerText = 'Gagal memuat';
         console.error('viewUserProfile error:', e);
+    }
+}
+
+async function _loadUserActivity(email, userData) {
+    const actEl = document.getElementById('upvActivity');
+    if (!actEl) return;
+    try {
+        // Ambil komentar terbaru user sebagai proxy aktivitas
+        const db_fs = window._firestoreDB;
+        const qComments = window._fsQuery(
+            window._fsCollection(db_fs, 'comments'),
+            window._fsWhere('email', '==', email)
+        );
+        const snap = await window._fsGetDocs(qComments);
+        const comments = snap.docs.map(d => d.data()).sort((a, b) => {
+            const ta = a.createdAt ? a.createdAt.seconds : 0;
+            const tb = b.createdAt ? b.createdAt.seconds : 0;
+            return tb - ta;
+        }).slice(0, 5);
+        
+        // Ambil history dari userData jika ada
+        const history = userData.recentHistory || [];
+        const likedSongs = userData.likedSongs || [];
+        
+        let html = '';
+        if (history.length > 0) {
+            html += '<div style="font-size:12px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:0 16px 8px;">Lagu Terakhir Diputar</div>';
+            html += history.slice(0, 3).map(t =>
+                '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
+                '<img loading="lazy" class="v-img" src="' + (t.img || '') + '">' +
+                '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>'
+            ).join('');
+        }
+        if (likedSongs.length > 0) {
+            html += '<div style="font-size:12px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:8px 16px;">Lagu yang Disukai</div>';
+            html += likedSongs.slice(0, 3).map(t =>
+                '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
+                '<img loading="lazy" class="v-img" src="' + (t.img || '') + '">' +
+                '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>'
+            ).join('');
+        }
+        if (comments.length > 0) {
+            html += '<div style="font-size:12px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:8px 16px;">Komentar Terbaru</div>';
+            html += comments.map(c =>
+                '<div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.05);">' +
+                '<div style="font-size:13px;color:white;">' + (c.text || '') + '</div>' +
+                '<div style="font-size:11px;color:var(--text-sub);margin-top:4px;">' + (c.createdAt ? new Date(c.createdAt.seconds * 1000).toLocaleDateString('id-ID') : '') + '</div>' +
+                '</div>'
+            ).join('');
+        }
+        if (!html) html = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>';
+        actEl.innerHTML = html;
+    } catch(e) {
+        if (actEl) actEl.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:16px;text-align:center;">Belum ada aktivitas publik.</div>';
     }
 }
 
@@ -1021,59 +1101,30 @@ function openChatWithUser() {
     const targetUser = window._viewingUser; if (!targetUser) return;
     const currentUser = getGoogleUser(); if (!currentUser) { showToast('Login dulu untuk berkirim pesan'); return; }
     
+    _dmTarget = { email: targetUser.email, name: targetUser.name || targetUser.email.split('@')[0] };
     switchView('chat');
-    document.getElementById('chatName').innerText = targetUser.name;
-    const av = document.getElementById('chatAvatar');
-    if (targetUser.picture) av.innerHTML = '<img src="' + targetUser.picture + '" style="width:100%;height:100%;object-fit:cover;">';
-    else av.innerText = targetUser.name.charAt(0).toUpperCase();
-    
-    loadChatMessages(targetUser.email);
+    const chatName = document.getElementById('chatName');
+    const chatAvatar = document.getElementById('chatAvatar');
+    if (chatName) chatName.innerText = _dmTarget.name;
+    if (chatAvatar) {
+        if (targetUser.picture) chatAvatar.innerHTML = '<img src="' + targetUser.picture + '" style="width:100%;height:100%;object-fit:cover;">';
+        else { chatAvatar.innerHTML = ''; chatAvatar.innerText = _dmTarget.name.charAt(0).toUpperCase(); }
+    }
+    loadDMMessages();
     if (_chatInterval) clearInterval(_chatInterval);
-    _chatInterval = setInterval(() => loadChatMessages(targetUser.email), 5000);
+    _chatInterval = setInterval(() => loadDMMessages(), 5000);
 }
 
 async function loadChatMessages(otherEmail) {
-    const currentUser = getGoogleUser(); if (!currentUser) return;
-    const list = document.getElementById('chatMessages');
-    try {
-        const db_fs = window._firestoreDB;
-        // Simple chat: query messages where (from == me AND to == him) OR (from == him AND to == me)
-        const q1 = window._fsQuery(window._fsCollection(db_fs, 'messages'), 
-                    window._fsWhere('from', '==', currentUser.email), 
-                    window._fsWhere('to', '==', otherEmail));
-        const q2 = window._fsQuery(window._fsCollection(db_fs, 'messages'), 
-                    window._fsWhere('from', '==', otherEmail), 
-                    window._fsWhere('to', '==', currentUser.email));
-        
-        const [snap1, snap2] = await Promise.all([window._fsGetDocs(q1), window._fsGetDocs(q2)]);
-        const allMsgs = [...snap1.docs, ...snap2.docs].map(d => d.data());
-        allMsgs.sort((a, b) => (a.at ? a.at.seconds : 0) - (b.at ? b.at.seconds : 0));
-        
-        list.innerHTML = allMsgs.map(m => {
-            const isMe = m.from === currentUser.email;
-            return '<div style="max-width:80%; align-self:' + (isMe ? 'flex-end' : 'flex-start') + '; background:' + (isMe ? 'var(--accent)' : 'rgba(255,255,255,0.1)') + '; color:white; padding:8px 14px; border-radius:18px; font-size:14px;">' + m.text + '</div>';
-        }).join('');
-        list.scrollTop = list.scrollHeight;
-    } catch(e) {}
+    // Alias untuk kompatibilitas — delegate ke loadDMMessages
+    if (otherEmail && (!_dmTarget || _dmTarget.email !== otherEmail)) {
+        _dmTarget = { email: otherEmail, name: otherEmail.split('@')[0] };
+    }
+    loadDMMessages();
 }
 
 async function sendChatMessage() {
-    const input = document.getElementById('chatInput');
-    const text = input.value.trim(); if (!text) return;
-    const currentUser = getGoogleUser();
-    const targetUser = window._viewingUser;
-    if (!currentUser || !targetUser) return;
-    
-    try {
-        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'messages'), {
-            from: currentUser.email,
-            to: targetUser.email,
-            text: text,
-            at: window._fsTimestamp()
-        });
-        input.value = '';
-        loadChatMessages(targetUser.email);
-    } catch(e) { showToast('Gagal mengirim pesan'); }
+    await sendDM();
 }
 
 // SUBSCRIBE SONG
@@ -1852,20 +1903,21 @@ async function syncUserProfile() {
         // Cek apakah sudah ada username
         const existing = await window._fsGetDoc(ref);
         const existingData = existing.exists() ? existing.data() : {};
+        // Ambil history lokal untuk disimpan ke profil (aktivitas publik)
+        const localHistory = JSON.parse(localStorage.getItem('auspotyHistory') || '[]').slice(0, 5);
         await window._fsSetDoc(ref, {
             email: user.email,
             name: user.name,
             picture: user.picture || '',
             updatedAt: window._fsTimestamp(),
             // Jangan overwrite username jika sudah ada
-            username: existingData.username || ''
+            username: existingData.username || '',
+            recentHistory: localHistory
         }, { merge: true });
         // Invalidate cache supaya search bisa menemukan user ini
         _usersCacheLoaded = false;
         _usersCache = null;
     } catch(e) { console.error('syncUserProfile error:', e); }
-}
-    } catch(e) { console.error('syncUserProfile:', e); }
 }
 
 // Lihat profil pengguna lain — gunakan view user-profile yang sudah ada
@@ -1889,21 +1941,28 @@ function closeSearchUsers() {
     document.getElementById('searchUsersModal').style.display = 'none';
 }
 async function searchUsers() {
-    const q = document.getElementById('searchUserInput').value.trim().toLowerCase();
+    const rawQ = document.getElementById('searchUserInput').value.trim();
     const results = document.getElementById('searchUserResults');
-    if (!q) { results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Masukkan nama untuk dicari</div>'; return; }
+    if (!rawQ) { results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Masukkan nama atau @username untuk dicari</div>'; return; }
     results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Mencari...</div>';
     try {
         const users = await _ensureUsersCache();
-        const usersFiltered = users.filter(u => u.name && u.name.toLowerCase().includes(q));
+        const isTagSearch = rawQ.startsWith('@');
+        const ql = isTagSearch ? rawQ.slice(1).toLowerCase() : rawQ.toLowerCase();
+        const usersFiltered = users.filter(u => {
+            if (isTagSearch) return (u.username || '').toLowerCase().includes(ql);
+            return (u.name || '').toLowerCase().includes(ql) ||
+                   (u.username || '').toLowerCase().includes(ql) ||
+                   (u.email || '').toLowerCase().includes(ql);
+        });
         const usersTop = usersFiltered.slice(0, 40);
         if (!usersTop.length) { results.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;">Tidak ada pengguna ditemukan</div>'; return; }
         results.innerHTML = usersTop.map(u =>
             '<div onclick="viewUserProfile(\'' + u.email + '\')" style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:rgba(255,255,255,0.05);margin-bottom:8px;cursor:pointer;">' +
             '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;overflow:hidden;flex-shrink:0;">' +
-            (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : u.name.charAt(0).toUpperCase()) +
+            (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : (u.name||'?').charAt(0).toUpperCase()) +
             '</div>' +
-            '<div><div style="font-size:14px;font-weight:700;color:white;">' + u.name + '</div>' +
+            '<div><div style="font-size:14px;font-weight:700;color:white;">' + (u.name||'') + (u.username ? ' <span style="color:var(--accent);font-size:12px;">@' + u.username + '</span>' : '') + '</div>' +
             '<div style="font-size:12px;color:var(--text-sub);">' + u.email + '</div></div>' +
             '</div>'
         ).join('');
@@ -1982,13 +2041,34 @@ if (_origUpdateProfileUI) {
         _origUpdateProfileUI();
         syncUserProfile();
     };
+}
 
-// Alias openDMView untuk buka DM dari profil pengguna
+// ============================================================
+// ONLINE / OFFLINE DETECTION — auto refresh saat kembali online
+// ============================================================
+let _wasOffline = false;
+window.addEventListener('online', function() {
+    if (_wasOffline) {
+        _wasOffline = false;
+        showToast('Kembali online! Memuat ulang...');
+        setTimeout(function() {
+            loadHomeData();
+            // Reload ytPlayer jika ada lagu yang sedang diputar
+            if (currentTrack && !window._localAudioPlaying && ytPlayer && ytPlayer.loadVideoById) {
+                ytPlayer.loadVideoById(currentTrack.videoId);
+            }
+        }, 1000);
+    }
+});
+window.addEventListener('offline', function() {
+    _wasOffline = true;
+    showToast('Koneksi terputus. Mode offline aktif.');
+});
 function openDMView(email, name) {
     // Tutup modal profil jika ada
     const profileModal = document.getElementById('userProfileModal');
     if (profileModal) profileModal.style.display = 'none';
-    // Buka chat view
+    // Set target dan buka chat view
     _dmTarget = { email, name };
     const chatName = document.getElementById('chatName');
     const chatAvatar = document.getElementById('chatAvatar');
@@ -1999,6 +2079,8 @@ function openDMView(email, name) {
     }
     switchView('chat');
     loadDMMessages();
+    if (_chatInterval) clearInterval(_chatInterval);
+    _chatInterval = setInterval(() => loadDMMessages(), 5000);
 }
 
 // Set username (@tag) pengguna
@@ -2015,5 +2097,4 @@ async function saveUsername(username) {
         _usersCacheLoaded = false; _usersCache = null;
         showToast('@' + clean + ' berhasil disimpan!');
     } catch(e) { showToast('Gagal simpan username: ' + e.message); }
-}
 }
