@@ -2349,7 +2349,6 @@ async function loadDMMessages() {
     if (!_dmTarget) return;
     const me = getGoogleUser();
     if (!me) return;
-    // Gunakan chatMessages (view chat) atau dmMessages (modal DM)
     const container = document.getElementById('chatMessages') || document.getElementById('dmMessages');
     if (!container) return;
     try {
@@ -2361,15 +2360,25 @@ async function loadDMMessages() {
             window._fsWhere('convId', '==', convId)
         );
         const snap = await window._fsGetDocs(q);
-        if (snap.empty) { container.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:16px;font-size:13px;">Belum ada pesan. Mulai percakapan!</div>'; return; }
+        if (snap.empty) { container.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:32px 16px;font-size:13px;">Belum ada pesan.<br>Mulai percakapan! 👋</div>'; return; }
         const msgs = snap.docs.map(d => d.data()).sort((a, b) => (a.createdAt ? a.createdAt.seconds : 0) - (b.createdAt ? b.createdAt.seconds : 0));
         container.innerHTML = msgs.map(msg => {
             const isMine = msg.from === me.email;
             const time = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
-            return '<div style="display:flex;justify-content:' + (isMine ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
-                '<div style="max-width:75%;background:' + (isMine ? 'linear-gradient(135deg,var(--accent),var(--accent2))' : 'rgba(255,255,255,0.1)') + ';border-radius:' + (isMine ? '16px 16px 4px 16px' : '16px 16px 16px 4px') + ';padding:10px 14px;">' +
-                '<p style="font-size:14px;color:white;margin:0 0 4px;">' + msg.text + '</p>' +
-                '<span style="font-size:10px;color:rgba(255,255,255,0.5);">' + time + '</span>' +
+            const align = isMine ? 'flex-end' : 'flex-start';
+            const bg = isMine ? 'linear-gradient(135deg,var(--accent),var(--accent2))' : 'rgba(255,255,255,0.1)';
+            const radius = isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px';
+            let content = '';
+            if (msg.photo) {
+                content += '<img src="' + msg.photo + '" style="max-width:200px;max-height:200px;border-radius:10px;display:block;margin-bottom:' + (msg.text ? '6px' : '0') + ';cursor:pointer;" onclick="window.open(this.src)">';
+            }
+            if (msg.text) {
+                content += '<p style="font-size:14px;color:white;margin:0 0 4px;word-break:break-word;">' + msg.text + '</p>';
+            }
+            return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
+                '<div style="max-width:78%;background:' + bg + ';border-radius:' + radius + ';padding:10px 14px;">' +
+                content +
+                '<span style="font-size:10px;color:rgba(255,255,255,0.5);display:block;text-align:right;">' + time + '</span>' +
                 '</div></div>';
         }).join('');
         container.scrollTop = container.scrollHeight;
@@ -2379,23 +2388,65 @@ async function loadDMMessages() {
 async function sendDM() {
     const me = getGoogleUser();
     if (!me || !_dmTarget) return;
-    // Coba chatInput dulu (view chat), fallback ke dmInput (modal)
-    const input = document.getElementById('chatInput') || document.getElementById('dmInput');
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) return;
+    const input = document.getElementById('chatInput');
+    const text = input ? input.value.trim() : '';
+    const photoData = window._chatPendingPhoto || null;
+    if (!text && !photoData) return;
     try {
         for (let i = 0; i < 10 && !window._firestoreDB; i++) await new Promise(r => setTimeout(r, 300));
         if (!window._firestoreDB) { showToast('Koneksi gagal'); return; }
         const convId = _getDMId(me.email, _dmTarget.email);
-        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'messages'), {
+        const msgData = {
             convId, from: me.email, to: _dmTarget.email,
             fromName: me.name || me.email.split('@')[0],
-            text, createdAt: window._fsTimestamp(), read: false
-        });
-        input.value = '';
+            text: text || '', createdAt: window._fsTimestamp(), read: false
+        };
+        if (photoData) msgData.photo = photoData;
+        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'messages'), msgData);
+        if (input) { input.value = ''; input.style.height = 'auto'; }
+        cancelChatPhoto();
         loadDMMessages();
     } catch(e) { showToast('Gagal kirim: ' + (e.message || String(e))); }
+}
+
+// ── FOTO DI CHAT ─────────────────────────────────────────────────────────────
+window._chatPendingPhoto = null;
+
+function onChatPhotoSelected(input) {
+    const file = input.files[0];
+    if (!file) return;
+    // Compress ke max 400px dan quality 60%
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const MAX = 400;
+            let w = img.width, h = img.height;
+            if (w > h) { if (w > MAX) { h = h * MAX / w; w = MAX; } }
+            else { if (h > MAX) { w = w * MAX / h; h = MAX; } }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            const b64 = canvas.toDataURL('image/jpeg', 0.6);
+            window._chatPendingPhoto = b64;
+            // Tampilkan preview
+            const preview = document.getElementById('chatPhotoPreview');
+            const previewImg = document.getElementById('chatPhotoImg');
+            if (preview) preview.style.display = 'block';
+            if (previewImg) previewImg.src = b64;
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    input.value = ''; // reset input
+}
+
+function cancelChatPhoto() {
+    window._chatPendingPhoto = null;
+    const preview = document.getElementById('chatPhotoPreview');
+    const previewImg = document.getElementById('chatPhotoImg');
+    if (preview) preview.style.display = 'none';
+    if (previewImg) previewImg.src = '';
 }
 
 // ── NOTIFIKASI PESAN MASUK ─────────────────────────────────────────────────
@@ -2451,23 +2502,46 @@ if (_origUpdateProfileUI) {
 // ONLINE / OFFLINE DETECTION — auto refresh saat kembali online
 // ============================================================
 let _wasOffline = false;
-window.addEventListener('online', function() {
-    if (_wasOffline) {
-        _wasOffline = false;
-        showToast('Kembali online! Memuat ulang...');
-        setTimeout(function() {
-            loadHomeData();
-            // Reload ytPlayer jika ada lagu yang sedang diputar
-            if (currentTrack && !window._localAudioPlaying && ytPlayer && ytPlayer.loadVideoById) {
-                ytPlayer.loadVideoById(currentTrack.videoId);
-            }
-        }, 1000);
-    }
-});
+let _offlineCheckInterval = null;
+
+window.addEventListener('online', _onBackOnline);
 window.addEventListener('offline', function() {
     _wasOffline = true;
     showToast('Koneksi terputus. Mode offline aktif.');
+    // Mulai polling aktif untuk deteksi kembali online (backup untuk WebView Android)
+    _startOfflinePolling();
 });
+
+function _onBackOnline() {
+    if (!_wasOffline) return;
+    _wasOffline = false;
+    _stopOfflinePolling();
+    showToast('Kembali online! Memuat ulang...');
+    setTimeout(function() {
+        loadHomeData();
+        if (currentTrack && !window._localAudioPlaying) {
+            if (ytPlayer && ytPlayer.loadVideoById && _ytPlayerReady) {
+                ytPlayer.loadVideoById(currentTrack.videoId);
+            }
+        }
+    }, 1200);
+}
+
+function _startOfflinePolling() {
+    if (_offlineCheckInterval) return;
+    _offlineCheckInterval = setInterval(async function() {
+        if (!_wasOffline) { _stopOfflinePolling(); return; }
+        try {
+            // Ping API ringan untuk cek koneksi
+            const r = await fetch('/api/search?query=test&_t=' + Date.now(), { cache: 'no-store' });
+            if (r.ok) _onBackOnline();
+        } catch(e) {}
+    }, 5000);
+}
+
+function _stopOfflinePolling() {
+    if (_offlineCheckInterval) { clearInterval(_offlineCheckInterval); _offlineCheckInterval = null; }
+}
 function openDMView(email, name) {
     // Tutup modal profil jika ada
     const profileModal = document.getElementById('userProfileModal');

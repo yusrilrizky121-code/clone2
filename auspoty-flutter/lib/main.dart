@@ -190,6 +190,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         if (res.statusCode == 200 && mounted) {
           _onlineCheckTimer?.cancel();
           setState(() { _isOffline = false; _loading = true; });
+          // Inject JS untuk trigger online event di WebView
+          await _wvc?.evaluateJavascript(source:
+            "(function(){ window._wasOffline=true; if(typeof _onBackOnline==='function') _onBackOnline(); })();");
           _wvc?.reload();
         }
       } catch (_) {}
