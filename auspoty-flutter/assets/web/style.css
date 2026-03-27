@@ -69,6 +69,10 @@ a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
     touch-action: manipulation;
     cursor: pointer;
 }
+/* h-card di dalam horizontal scroll — izinkan scroll vertikal halaman */
+.h-card {
+    touch-action: pan-y;
+}
 
 /* ===== HOME HEADER ===== */
 .home-header {

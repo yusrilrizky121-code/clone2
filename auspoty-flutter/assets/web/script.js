@@ -1132,20 +1132,22 @@ async function _loadUserActivity(email, userData) {
         
         if (history.length > 0) {
             html += '<div style="font-size:11px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:12px 16px 6px;font-weight:700;">Lagu Terakhir Diputar</div>';
-            html += history.slice(0, 3).map(t =>
-                '<div class="v-item" onclick="playMusicById(\'' + (t.videoId||'') + '\')" style="cursor:pointer;">' +
+            html += history.slice(0, 3).map(t => {
+                if (t.videoId) _cacheTrack(t); // cache agar playMusicById bisa jalan
+                return '<div class="v-item" onclick="playMusic(\'' + (t.videoId||'') + '\',\'' + encodeURIComponent(JSON.stringify({videoId:t.videoId||'',title:t.title||'',artist:t.artist||'',img:t.img||''})) + '\')" style="cursor:pointer;">' +
                 '<img loading="lazy" class="v-img" src="' + (t.img || 'https://via.placeholder.com/48x48?text=music') + '">' +
-                '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>'
-            ).join('');
+                '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
+            }).join('');
         }
         
         if (likedSongs.length > 0) {
             html += '<div style="font-size:11px;color:var(--text-sub);text-transform:uppercase;letter-spacing:1px;padding:12px 16px 6px;font-weight:700;">Lagu yang Disukai</div>';
-            html += likedSongs.slice(0, 3).map(t =>
-                '<div class="v-item" onclick="playMusicById(\'' + (t.videoId||'') + '\')" style="cursor:pointer;">' +
+            html += likedSongs.slice(0, 3).map(t => {
+                if (t.videoId) _cacheTrack(t);
+                return '<div class="v-item" onclick="playMusic(\'' + (t.videoId||'') + '\',\'' + encodeURIComponent(JSON.stringify({videoId:t.videoId||'',title:t.title||'',artist:t.artist||'',img:t.img||''})) + '\')" style="cursor:pointer;">' +
                 '<img loading="lazy" class="v-img" src="' + (t.img || 'https://via.placeholder.com/48x48?text=music') + '">' +
-                '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>'
-            ).join('');
+                '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
+            }).join('');
         }
         
         if (comments.length > 0) {
@@ -2421,7 +2423,15 @@ async function loadDMMessages() {
         const snap = await window._fsGetDocs(q);
         if (snap.empty) { container.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:32px 16px;font-size:13px;">Belum ada pesan.<br>Mulai percakapan! 👋</div>'; return; }
         const msgs = snap.docs.map(d => d.data()).sort((a, b) => (a.createdAt ? a.createdAt.seconds : 0) - (b.createdAt ? b.createdAt.seconds : 0));
-        container.innerHTML = msgs.map(msg => {
+        
+        // Cek apakah user sedang scroll ke atas (baca pesan lama)
+        // Jika user di bawah (dalam 100px dari bottom), auto-scroll. Jika tidak, jangan ganggu.
+        const prevScrollTop = container.scrollTop;
+        const prevScrollHeight = container.scrollHeight;
+        const isAtBottom = (prevScrollHeight - prevScrollTop - container.clientHeight) < 100;
+        const prevMsgCount = container.querySelectorAll('[data-msg]').length;
+        
+        container.innerHTML = msgs.map((msg, idx) => {
             const isMine = msg.from === me.email;
             const time = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
             const align = isMine ? 'flex-end' : 'flex-start';
@@ -2434,13 +2444,21 @@ async function loadDMMessages() {
             if (msg.text) {
                 content += '<p style="font-size:14px;color:white;margin:0 0 4px;word-break:break-word;">' + msg.text + '</p>';
             }
-            return '<div style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
+            return '<div data-msg="' + idx + '" style="display:flex;justify-content:' + align + ';margin-bottom:6px;">' +
                 '<div style="max-width:78%;background:' + bg + ';border-radius:' + radius + ';padding:10px 14px;">' +
                 content +
                 '<span style="font-size:10px;color:rgba(255,255,255,0.5);display:block;text-align:right;">' + time + '</span>' +
                 '</div></div>';
         }).join('');
-        container.scrollTop = container.scrollHeight;
+        
+        // Scroll ke bawah hanya jika:
+        // 1. Pertama kali load (prevMsgCount == 0)
+        // 2. User sudah di posisi bawah
+        // 3. Pesan baru masuk (jumlah bertambah)
+        const newMsgCount = msgs.length;
+        if (prevMsgCount === 0 || isAtBottom || newMsgCount > prevMsgCount) {
+            container.scrollTop = container.scrollHeight;
+        }
     } catch(e) { container.innerHTML = '<div style="color:#ff5252;text-align:center;padding:16px;font-size:13px;">Gagal memuat pesan</div>'; }
 }
 
