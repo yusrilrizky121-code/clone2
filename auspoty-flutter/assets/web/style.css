@@ -507,3 +507,41 @@ body.font-xlarge .v-title { font-size: 20px !important; } body.font-xlarge .h-ti
 
 /* ===== HIDE VERCEL TOOLBAR ===== */
 vercel-live-feedback,vercel-toolbar,#__vercel-toolbar,[data-vercel-toolbar]{display:none!important;}
+
+/* ── Inline preview wrapper ── */
+.v-img-wrap {
+    position: relative; flex-shrink: 0;
+    width: 52px; height: 52px;
+    border-radius: 10px; overflow: hidden;
+}
+.v-img-wrap .v-img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: opacity .25s;
+    border-radius: 0; margin: 0;
+}
+.h-img-wrap {
+    position: relative;
+    width: 140px; height: 140px;
+    border-radius: 14px; overflow: hidden;
+    margin-bottom: 10px;
+}
+.h-img-wrap .h-img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: opacity .25s;
+    border-radius: 0; margin: 0;
+}
+.v-preview-frame {
+    position: absolute; inset: 0;
+    opacity: 0;
+    transition: opacity .25s;
+    pointer-events: none;
+    z-index: 2;
+}
+.v-preview-frame iframe {
+    width: 100%; height: 100%;
+    border: none;
+}

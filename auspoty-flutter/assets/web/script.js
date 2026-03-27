@@ -410,15 +410,7 @@ function closeTrackPreview() {
     _previewCurrentVid = null;
 }
 
-// Long press untuk mobile — 600ms
-function _previewTouchStart(videoId, e) {
-    _previewTouchEnd();
-    _previewTouchTimer = setTimeout(function() {
-        openTrackPreview(videoId);
-    }, 600);
-}
-function _previewTouchEnd() {
-    if (_previewTouchTimer) { clearTimeout(_previewTouchTimer); _previewTouchTimer = null; }
+
 }
 
 function startProgressBar() {
@@ -763,12 +755,18 @@ function renderVItem(t) {
     _cacheTrack(t);
     var vid = t.videoId;
     var img = getHighResImage(t.thumbnail || t.img || '');
-    return '<div class="v-item" onclick="playMusicById(\'' + vid + '\')" ontouchstart="_previewTouchStart(\'' + vid + '\',event)" ontouchend="_previewTouchEnd()" ontouchmove="_previewTouchEnd()">' +
-        '<div style="position:relative;flex-shrink:0;">' +
-        '<img loading="lazy" class="v-img" src="' + img + '">' +
-        '<div class="preview-btn" onclick="event.stopPropagation();openTrackPreview(\'' + vid + '\')"><svg viewBox="0 0 24 24" style="fill:white;width:10px;height:10px;"><path d="M8 5v14l11-7z"/></svg></div>' +
-        '</div>' +
-        '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
+    return '<div class="v-item" onclick="playMusicById(\'' + vid + '\')" '
+        + 'onmouseenter="_inlinePreviewStart(\'' + vid + '\',this)" '
+        + 'onmouseleave="_inlinePreviewStop(this)" '
+        + 'ontouchstart="_inlinePreviewTouch(\'' + vid + '\',this,event)" '
+        + 'ontouchend="_inlinePreviewStopTouch(this)" '
+        + 'ontouchmove="_inlinePreviewStopTouch(this)">'
+        + '<div class="v-img-wrap">'
+        + '<img loading="lazy" class="v-img" src="' + img + '">'
+        + '<div class="v-preview-frame" id="pf-' + vid + '"></div>'
+        + '</div>'
+        + '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div>'
+        + '<div class="v-sub">' + (t.artist || '') + '</div></div></div>';
 }
 function renderDownloadedVItem(t) {
     _cacheTrack(t);
@@ -824,12 +822,17 @@ function renderHCard(t) {
     _cacheTrack(t);
     var vid = t.videoId;
     var img = getHighResImage(t.thumbnail || t.img || '');
-    return '<div class="h-card" onclick="playMusicById(\'' + vid + '\')" ontouchstart="_previewTouchStart(\'' + vid + '\',event)" ontouchend="_previewTouchEnd()" ontouchmove="_previewTouchEnd()">' +
-        '<div style="position:relative;">' +
-        '<img loading="lazy" class="h-img" src="' + img + '">' +
-        '<div class="preview-btn" onclick="event.stopPropagation();openTrackPreview(\'' + vid + '\')"><svg viewBox="0 0 24 24" style="fill:white;width:10px;height:10px;"><path d="M8 5v14l11-7z"/></svg></div>' +
-        '</div>' +
-        '<div class="h-title">' + (t.title || '') + '</div></div>';
+    return '<div class="h-card" onclick="playMusicById(\'' + vid + '\')" '
+        + 'onmouseenter="_inlinePreviewStart(\'' + vid + '\',this)" '
+        + 'onmouseleave="_inlinePreviewStop(this)" '
+        + 'ontouchstart="_inlinePreviewTouch(\'' + vid + '\',this,event)" '
+        + 'ontouchend="_inlinePreviewStopTouch(this)" '
+        + 'ontouchmove="_inlinePreviewStopTouch(this)">'
+        + '<div class="h-img-wrap">'
+        + '<img loading="lazy" class="h-img" src="' + img + '">'
+        + '<div class="v-preview-frame" id="pf-' + vid + '"></div>'
+        + '</div>'
+        + '<div class="h-title">' + (t.title || '') + '</div></div>';
 }
 function renderArtistCard(name) {
     return '<div class="artist-card" onclick="openArtist(\'' + encodeURIComponent(name) + '\')">' +
@@ -2711,3 +2714,78 @@ async function saveUsername(username) {
         showToast('@' + clean + ' berhasil disimpan!');
     } catch(e) { showToast('Gagal simpan username: ' + e.message); }
 }
+
+// ── INLINE PREVIEW — video langsung di thumbnail, mute, loop 20 detik ────────
+var _inlinePreviewMap = {};   // vid -> { player, timer, loopTimer, el }
+var _inlineTouchTimer = null;
+var _inlineTouchVid   = null;
+
+function _inlinePreviewStart(vid, cardEl) {
+    if (_inlinePreviewMap[vid]) return; // sudah aktif
+    var frame = cardEl.querySelector('.v-preview-frame');
+    if (!frame) return;
+    if (typeof YT === 'undefined' || !YT.Player) return;
+
+    // Buat iframe YT di dalam frame
+    var div = document.createElement('div');
+    frame.appendChild(div);
+
+    var p = new YT.Player(div, {
+        videoId: vid,
+        playerVars: {
+            autoplay: 1, mute: 1, playsinline: 1,
+            controls: 0, rel: 0, modestbranding: 1,
+            start: 30, disablekb: 1, iv_load_policy: 3, fs: 0
+        },
+        events: {
+            onReady: function(e) {
+                e.target.mute();
+                e.target.playVideo();
+                frame.style.opacity = '1';
+                var img = cardEl.querySelector('img');
+                if (img) img.style.opacity = '0';
+                // Loop setiap 20 detik
+                var lt = setInterval(function() {
+                    try { e.target.seekTo(30); e.target.playVideo(); } catch(x) {}
+                }, 20000);
+                _inlinePreviewMap[vid].loopTimer = lt;
+            },
+            onStateChange: function(e) {
+                if (e.data === YT.PlayerState.ENDED) {
+                    try { e.target.seekTo(30); e.target.playVideo(); } catch(x) {}
+                }
+            }
+        }
+    });
+    _inlinePreviewMap[vid] = { player: p, loopTimer: null, el: cardEl };
+}
+
+function _inlinePreviewStop(cardEl) {
+    var frame = cardEl.querySelector('.v-preview-frame');
+    var img   = cardEl.querySelector('img');
+    // Cari vid dari map
+    var vid = null;
+    for (var k in _inlinePreviewMap) {
+        if (_inlinePreviewMap[k].el === cardEl) { vid = k; break; }
+    }
+    if (!vid) return;
+    var entry = _inlinePreviewMap[vid];
+    if (entry.loopTimer) clearInterval(entry.loopTimer);
+    try { entry.player.destroy(); } catch(e) {}
+    delete _inlinePreviewMap[vid];
+    if (frame) { frame.innerHTML = ''; frame.style.opacity = '0'; }
+    if (img)   img.style.opacity = '1';
+}
+
+// Mobile: long press 600ms untuk preview, release untuk stop
+function _inlinePreviewTouch(vid, cardEl, e) {
+    _inlineTouchVid = vid;
+    _inlineTouchTimer = setTimeout(function() {
+        _inlinePreviewStart(vid, cardEl);
+    }, 600);
+}
+function _inlinePreviewStopTouch(cardEl) {
+    if (_inlineTouchTimer) { clearTimeout(_inlineTouchTimer); _inlineTouchTimer = null; }
+    // Jangan stop saat touch end — biarkan preview jalan sampai user pindah
+}
+
