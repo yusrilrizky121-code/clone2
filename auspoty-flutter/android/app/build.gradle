@@ -77,6 +77,15 @@ android {
         checkReleaseBuilds false
         abortOnError false
     }
+
+    // Rename APK output
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            if (variant.buildType.name == 'release') {
+                outputFileName = "auspoty-arm64-v8a-release.apk"
+            }
+        }
+    }
 }
 
 flutter {
