@@ -603,87 +603,100 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   }
 
   Future<void> _download(String videoId, String title, {String artist = '', String img = ''}) async {
-    final t2 = title.replaceAll("'", "\\'");
     try {
-      _wvc?.evaluateJavascript(source: "if(typeof showToast==='function') showToast('Mengonversi lagu... tunggu sebentar');");
+      _wvc?.evaluateJavascript(source: "if(typeof showToast==='function') showToast('⏳ Mengonversi lagu...');");
 
-      // Langsung hit ytmp3.mobi dari Dart (bypass API Python untuk hindari Vercel timeout)
       final ytHeaders = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
         'Referer': 'https://id.ytmp3.mobi/',
         'Origin': 'https://id.ytmp3.mobi',
-        'Accept': '*/*',
+        'Accept': 'application/json, */*',
       };
 
-      // Step 1: init
-      final rnd1 = DateTime.now().millisecondsSinceEpoch / 1000.0;
-      final initRes = await http.get(
-        Uri.parse('https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_=$rnd1'),
-        headers: ytHeaders,
-      ).timeout(const Duration(seconds: 15));
-      if (initRes.statusCode != 200) throw Exception('init HTTP ${initRes.statusCode}');
-      final initJson = json.decode(initRes.body) as Map<String, dynamic>;
-      if ((initJson['error'] ?? 0) != 0) throw Exception('init error: ${initJson['error']}');
-      final convertUrl = initJson['convertURL'] as String? ?? '';
-      if (convertUrl.isEmpty) throw Exception('convertURL kosong');
+      String downloadUrl = '';
+      String apiTitle = title;
 
-      // Step 2: convert
-      final rnd2 = DateTime.now().millisecondsSinceEpoch / 1000.0;
-      final convRes = await http.get(
-        Uri.parse('$convertUrl&v=$videoId&f=mp3&_=$rnd2'),
-        headers: ytHeaders,
-      ).timeout(const Duration(seconds: 15));
-      if (convRes.statusCode != 200) throw Exception('convert HTTP ${convRes.statusCode}');
-      final convJson = json.decode(convRes.body) as Map<String, dynamic>;
-      if ((convJson['error'] ?? 0) != 0) throw Exception('convert error: ${convJson['error']}');
+      // Coba beberapa endpoint ytmp3.mobi
+      final endpoints = [
+        'https://a.ymcdn.org/api/v1/init?p=y&23=1llum1n471',
+        'https://d.ymcdn.org/api/v1/init?p=y&23=1llum1n471',
+      ];
 
-      final progressUrl = convJson['progressURL'] as String? ?? '';
-      String downloadUrl = convJson['downloadURL'] as String? ?? '';
-      String apiTitle = convJson['title'] as String? ?? title;
+      for (final baseEndpoint in endpoints) {
+        try {
+          final rnd1 = DateTime.now().millisecondsSinceEpoch / 1000.0;
+          final initRes = await http.get(
+            Uri.parse('$baseEndpoint&_=$rnd1'),
+            headers: ytHeaders,
+          ).timeout(const Duration(seconds: 15));
+          if (initRes.statusCode != 200) continue;
+          final initJson = json.decode(initRes.body) as Map<String, dynamic>;
+          if ((initJson['error'] ?? 0) != 0) continue;
+          final convertUrl = initJson['convertURL'] as String? ?? '';
+          if (convertUrl.isEmpty) continue;
 
-      // Step 3: poll progress
-      if (progressUrl.isNotEmpty) {
-        for (int i = 0; i < 30; i++) {
-          await Future.delayed(const Duration(milliseconds: 1500));
-          final rnd3 = DateTime.now().millisecondsSinceEpoch / 1000.0;
-          try {
-            final progRes = await http.get(
-              Uri.parse('$progressUrl&_=$rnd3'),
-              headers: ytHeaders,
-            ).timeout(const Duration(seconds: 10));
-            if (progRes.statusCode != 200) continue;
-            final progJson = json.decode(progRes.body) as Map<String, dynamic>;
-            if ((progJson['error'] ?? 0) != 0) throw Exception('progress error');
-            final progress = (progJson['progress'] as num?)?.toInt() ?? 0;
-            if (progress >= 3) {
-              downloadUrl = progJson['downloadURL'] as String? ?? downloadUrl;
-              apiTitle = progJson['title'] as String? ?? apiTitle;
-              break;
+          final rnd2 = DateTime.now().millisecondsSinceEpoch / 1000.0;
+          final convRes = await http.get(
+            Uri.parse('$convertUrl&v=$videoId&f=mp3&_=$rnd2'),
+            headers: ytHeaders,
+          ).timeout(const Duration(seconds: 20));
+          if (convRes.statusCode != 200) continue;
+          final convJson = json.decode(convRes.body) as Map<String, dynamic>;
+          if ((convJson['error'] ?? 0) != 0) continue;
+
+          final progressUrl = convJson['progressURL'] as String? ?? '';
+          downloadUrl = convJson['downloadURL'] as String? ?? '';
+          apiTitle = convJson['title'] as String? ?? title;
+
+          // Poll progress
+          if (progressUrl.isNotEmpty) {
+            for (int i = 0; i < 40; i++) {
+              await Future.delayed(const Duration(milliseconds: 1500));
+              final rnd3 = DateTime.now().millisecondsSinceEpoch / 1000.0;
+              try {
+                final progRes = await http.get(
+                  Uri.parse('$progressUrl&_=$rnd3'),
+                  headers: ytHeaders,
+                ).timeout(const Duration(seconds: 10));
+                if (progRes.statusCode != 200) continue;
+                final progJson = json.decode(progRes.body) as Map<String, dynamic>;
+                if ((progJson['error'] ?? 0) != 0) break;
+                final progress = (progJson['progress'] as num?)?.toInt() ?? 0;
+                if (progress >= 3) {
+                  downloadUrl = progJson['downloadURL'] as String? ?? downloadUrl;
+                  apiTitle = progJson['title'] as String? ?? apiTitle;
+                  break;
+                }
+              } catch (_) { continue; }
             }
-          } catch (_) { continue; }
-        }
+          }
+
+          if (downloadUrl.isNotEmpty) break; // berhasil
+        } catch (_) { continue; }
       }
 
-      if (downloadUrl.isEmpty) throw Exception('URL download tidak ditemukan');
+      if (downloadUrl.isEmpty) throw Exception('Gagal mendapatkan URL download');
 
-      _wvc?.evaluateJavascript(source: "if(typeof showToast==='function') showToast('Mengunduh file...');");
+      _wvc?.evaluateJavascript(source: "if(typeof showToast==='function') showToast('⬇️ Mengunduh...');");
 
-      // Step 4: Download file
+      // Download file
       final client = http.Client();
       final req = http.Request('GET', Uri.parse(downloadUrl));
       req.headers.addAll({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120',
         'Referer': 'https://id.ytmp3.mobi/',
       });
-      final streamedRes = await client.send(req).timeout(const Duration(seconds: 60));
+      final streamedRes = await client.send(req).timeout(const Duration(seconds: 90));
       if (streamedRes.statusCode != 200) {
         client.close();
         throw Exception('Download HTTP ${streamedRes.statusCode}');
       }
 
-      // Step 5: Simpan ke app documents directory
+      // Simpan ke penyimpanan internal app (bisa diakses oleh player)
       final appDir = await getApplicationDocumentsDirectory();
-      final f = File('${appDir.path}/$videoId.mp3');
+      // Bersihkan nama file
+      final safeFilename = videoId.replaceAll(RegExp(r'[^\w]'), '_');
+      final f = File('${appDir.path}/$safeFilename.mp3');
       final sink = f.openWrite();
       await streamedRes.stream.pipe(sink);
       await sink.close();
@@ -693,7 +706,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         throw Exception('File gagal tersimpan');
       }
 
-      // Step 6: Ambil artist+img dari WebView jika kosong
+      // Ambil artist+img dari WebView jika kosong
       String resolvedArtist = artist;
       String resolvedImg = img;
       if (resolvedArtist.isEmpty || resolvedImg.isEmpty) {
@@ -706,12 +719,12 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         } catch (_) {}
       }
 
-      // Step 7: Simpan metadata ke SharedPreferences
+      // Simpan metadata ke SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final mapJson = prefs.getString('downloadedFiles') ?? '{}';
       final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
       fileMap[videoId] = {
-        'filename': videoId,
+        'filename': safeFilename,
         'ext': 'mp3',
         'title': apiTitle,
         'artist': resolvedArtist,
@@ -720,7 +733,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       };
       await prefs.setString('downloadedFiles', json.encode(fileMap));
 
-      // Step 8: Beritahu JS agar simpan ke IndexedDB
+      // Beritahu JS agar simpan ke IndexedDB
       final safeTitle = apiTitle.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
       final safeArtist = resolvedArtist.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
       final safeImg = resolvedImg.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
@@ -729,7 +742,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         (function(){
           var track={videoId:'$videoId',title:'$safeTitle',artist:'$safeArtist',img:'$safeImg'};
           if(typeof saveDownloadedSong==='function') saveDownloadedSong(track);
-          if(typeof showToast==='function') showToast('\u2713 Tersimpan: ${shortTitle.replaceAll("'", "\\'")}');
+          if(typeof showToast==='function') showToast('✓ Tersimpan: ${shortTitle.replaceAll("'", "\\'")}');
         })();
       """);
     } catch (e) {

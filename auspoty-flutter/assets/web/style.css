@@ -34,6 +34,8 @@ body {
     font-size: var(--base-font-size);
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
+    /* Smooth scroll di Android WebView */
+    scroll-behavior: auto;
 }
 body.light-mode {
     --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:rgba(0,0,0,0.07);
@@ -226,12 +228,14 @@ a, button, .nav-item, .v-item, .lib-item, .h-card, .pill,
 .message-other { align-self: flex-start; background: rgba(255,255,255,0.1); color: white; border-bottom-left-radius: 4px; }
 
 /* ===== ADDITIONAL FIXES ===== */
-.v-item { cursor: pointer;  }
+.v-item { cursor: pointer; contain: layout style; }
 .v-item:active { background: rgba(255,255,255,0.15); }
-.pill { cursor: pointer;  }
+.h-card { contain: layout style; }
+.lib-item { contain: layout style; }
+.pill { cursor: pointer; }
 .pill:active { transform: scale(0.95); }
 .ctrl-btn:active { transform: scale(0.9); }
-#btnSubscribe svg {  }
+#btnSubscribe svg { }
 
 /* REBUILD UI FIXES */
 .search-header-container { padding-top: 20px; }
