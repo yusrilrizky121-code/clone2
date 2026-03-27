@@ -956,6 +956,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 transparentBackground: false,
                 disabledActionModeMenuItems: ActionModeMenuItem.MENU_ITEM_NONE,
                 useShouldInterceptRequest: true,
+                // Performa: matikan fitur yang tidak perlu
+                disableContextMenu: true,
                 rendererPriorityPolicy: RendererPriorityPolicy(
                   rendererRequestedPriority: RendererPriority.RENDERER_PRIORITY_IMPORTANT,
                   waivedWhenNotVisible: false,
@@ -1176,10 +1178,14 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                         try {
                           var raw=decodeURIComponent("${Uri.encodeComponent(ud)}");
                           localStorage.setItem('auspotyGoogleUser',raw);
+                          window._manualAuth = true;
+                          window._homeLoaded = false;
                           var p=JSON.parse(raw);
+                          if(typeof _hideAuthScreen==='function') _hideAuthScreen();
                           if(typeof updateProfileUI==='function') updateProfileUI();
-                          if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
+                          if(typeof loadHomeData==='function') loadHomeData();
                           if(typeof showToast==='function') showToast('Selamat datang, '+(p.name||'').split(' ')[0]+'!');
+                          if(typeof _startOnlineStatus==='function') setTimeout(_startOnlineStatus, 1000);
                         } catch(e){}
                       })()
                     """);
