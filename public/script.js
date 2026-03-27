@@ -30,11 +30,24 @@ let progressInterval = null;
 
 // YOUTUBE PLAYER (fallback web/PWA)
 let ytPlayer;
+let _ytPlayerReady = false;
+let _pendingVideoId = null;
+
 function onYouTubeIframeAPIReady() {
     ytPlayer = new YT.Player('youtube-player', {
         height: '0', width: '0',
         playerVars: { playsinline: 1, rel: 0 },
-        events: { onReady: () => {}, onStateChange: onPlayerStateChange }
+        events: {
+            onReady: () => {
+                _ytPlayerReady = true;
+                // Play lagu yang pending jika ada
+                if (_pendingVideoId) {
+                    ytPlayer.loadVideoById(_pendingVideoId);
+                    _pendingVideoId = null;
+                }
+            },
+            onStateChange: onPlayerStateChange
+        }
     });
 }
 function onPlayerStateChange(event) {
@@ -184,8 +197,19 @@ function playMusic(videoId, encodedData) {
     var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
 
     // Putar audio via ytPlayer (baik di web maupun APK)
-    if (ytPlayer && ytPlayer.loadVideoById) {
+    if (ytPlayer && ytPlayer.loadVideoById && _ytPlayerReady) {
         ytPlayer.loadVideoById(videoId);
+    } else {
+        // Player belum ready — queue untuk diputar saat ready
+        _pendingVideoId = videoId;
+        if (!ytPlayer) {
+            // YT API belum load sama sekali — coba load ulang
+            if (typeof YT === 'undefined') {
+                var tag = document.createElement('script');
+                tag.src = 'https://www.youtube.com/iframe_api';
+                document.head.appendChild(tag);
+            }
+        }
     }
     _startBgKeepAlive();
     // Kirim info ke native service untuk notifikasi saja (tidak intercept audio)
@@ -790,6 +814,48 @@ function renderSearchCategories() {
         '<div class="category-card" style="background:' + c.color + ';" onclick="searchByCategory(\'' + encodeURIComponent(c.query) + '\')">' +
         '<div class="category-title">' + c.title + '</div></div>'
     ).join('');
+}
+
+// Cari pengguna via @tag dari search view
+let _userSearchTimer = null;
+function _onUserSearchInput(val) {
+    clearTimeout(_userSearchTimer);
+    const el = document.getElementById('userSearchResultsInline');
+    if (!val || val.trim().length < 2) { if (el) el.innerHTML = ''; return; }
+    _userSearchTimer = setTimeout(() => _doUserSearchInline(val.trim()), 400);
+}
+function _doUserSearchFromInput() {
+    const val = (document.getElementById('userSearchInput').value || '').trim();
+    if (val) _doUserSearchInline(val);
+}
+async function _doUserSearchInline(q) {
+    const el = document.getElementById('userSearchResultsInline');
+    if (!el) return;
+    el.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:8px;">Mencari...</div>';
+    try {
+        for (let i = 0; i < 8 && !window._firestoreDB; i++) await new Promise(r => setTimeout(r, 300));
+        if (!window._firestoreDB) { el.innerHTML = ''; return; }
+        const isTag = q.startsWith('@');
+        const ql = isTag ? q.slice(1).toLowerCase() : q.toLowerCase();
+        // Ambil semua users dari Firestore
+        const snap = await window._fsGetDocs(window._fsCollection(window._firestoreDB, 'users'));
+        const users = snap.docs.map(d => d.data()).filter(u => u && u.email);
+        const filtered = users.filter(u => {
+            if (isTag) return (u.username || '').toLowerCase().includes(ql);
+            return (u.name || '').toLowerCase().includes(ql) ||
+                   (u.username || '').toLowerCase().includes(ql) ||
+                   (u.email || '').toLowerCase().includes(ql);
+        }).slice(0, 8);
+        if (!filtered.length) { el.innerHTML = '<div style="color:var(--text-sub);font-size:13px;padding:8px;">Tidak ada pengguna ditemukan</div>'; return; }
+        el.innerHTML = filtered.map(u =>
+            '<div onclick="viewUserProfile(\'' + u.email + '\')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,0.05);margin-bottom:6px;cursor:pointer;">' +
+            '<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;overflow:hidden;flex-shrink:0;">' +
+            (u.picture ? '<img src="' + u.picture + '" style="width:100%;height:100%;object-fit:cover;">' : (u.name||'?').charAt(0).toUpperCase()) + '</div>' +
+            '<div><div style="font-size:14px;font-weight:700;color:white;">' + (u.name||'') +
+            (u.username ? ' <span style="color:var(--accent);font-size:12px;font-weight:600;">@' + u.username + '</span>' : '') + '</div>' +
+            '<div style="font-size:12px;color:var(--text-sub);">' + u.email + '</div></div></div>'
+        ).join('');
+    } catch(e) { el.innerHTML = ''; }
 }
 function searchByCategory(encodedQuery) {
     const q = decodeURIComponent(encodedQuery);
@@ -1824,8 +1890,16 @@ function authSwitchTab(tab) {
     document.getElementById('formRegister').style.display = isLogin ? 'none' : 'block';
     const tl = document.getElementById('tabLogin');
     const tr = document.getElementById('tabRegister');
-    if (tl) { tl.style.background = isLogin ? 'white' : 'transparent'; tl.style.color = isLogin ? '#0a0a0f' : 'rgba(255,255,255,0.6)'; }
-    if (tr) { tr.style.background = isLogin ? 'transparent' : 'white'; tr.style.color = isLogin ? 'rgba(255,255,255,0.6)' : '#0a0a0f'; }
+    if (tl) {
+        tl.style.background = isLogin ? 'linear-gradient(135deg,#a78bfa,#f472b6)' : 'transparent';
+        tl.style.color = isLogin ? 'white' : 'rgba(255,255,255,0.5)';
+        tl.style.boxShadow = isLogin ? '0 4px 16px rgba(167,139,250,0.4)' : 'none';
+    }
+    if (tr) {
+        tr.style.background = isLogin ? 'transparent' : 'linear-gradient(135deg,#a78bfa,#f472b6)';
+        tr.style.color = isLogin ? 'rgba(255,255,255,0.5)' : 'white';
+        tr.style.boxShadow = isLogin ? 'none' : '0 4px 16px rgba(167,139,250,0.4)';
+    }
     authClearErr();
 }
 
@@ -1847,16 +1921,16 @@ function _authSetLoading(btnId, loading) {
 }
 
 function _authSuccess(userData) {
+    window._manualAuth = true; // Cegah onAuthStateChanged reset auth screen
     localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
     _hideAuthScreen();
+    window._homeLoaded = true;
     updateProfileUI();
     loadHomeData();
     if (typeof syncUserProfile === 'function') syncUserProfile();
     showToast('Selamat datang, ' + (userData.name || '').split(' ')[0] + '!');
-    // Mulai polling notifikasi pesan
     _lastMsgCheck = Date.now();
     _startMsgNotifPolling();
-    // Minta izin notifikasi browser
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
     }
