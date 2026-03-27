@@ -98,10 +98,19 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       _progressTimer?.cancel();
       try { _ch.invokeMethod('keepAlive'); } catch (_) {}
       WakelockPlus.enable();
+      // Set user offline saat app ke background
       _wvc?.evaluateJavascript(source: r"""
         (function(){
           if(window.__bgHidden) return;
           window.__bgHidden = true;
+          // Set offline di Firestore
+          var me = typeof getGoogleUser==='function' ? getGoogleUser() : null;
+          if(me && window._firestoreDB && window._fsSetDoc && window._fsDoc) {
+            try {
+              window._fsSetDoc(window._fsDoc(window._firestoreDB,'users',me.email),
+                {online:false},{merge:true}).catch(function(){});
+            } catch(e){}
+          }
           try {
             Object.defineProperty(document,'hidden',{get:function(){return false;},configurable:true});
             Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';},configurable:true});
@@ -115,15 +124,36 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         })();
       """);
     }
+    if (state == AppLifecycleState.detached) {
+      // App benar-benar ditutup — set offline
+      _wvc?.evaluateJavascript(source: r"""
+        (function(){
+          var me = typeof getGoogleUser==='function' ? getGoogleUser() : null;
+          if(me && window._firestoreDB && window._fsSetDoc && window._fsDoc) {
+            try {
+              window._fsSetDoc(window._fsDoc(window._firestoreDB,'users',me.email),
+                {online:false},{merge:true}).catch(function(){});
+            } catch(e){}
+          }
+        })();
+      """);
+    }
     if (state == AppLifecycleState.resumed) {
       _wvc?.evaluateJavascript(source: r"""
         (function(){
           window.__bgHidden=false;
           try{delete document.hidden;delete document.visibilityState;delete document.webkitHidden;}catch(e){}
+          // Set online kembali saat app dibuka
+          var me = typeof getGoogleUser==='function' ? getGoogleUser() : null;
+          if(me && window._firestoreDB && window._fsSetDoc && window._fsDoc && window._fsTimestamp) {
+            try {
+              window._fsSetDoc(window._fsDoc(window._firestoreDB,'users',me.email),
+                {online:true,lastSeen:window._fsTimestamp()},{merge:true}).catch(function(){});
+            } catch(e){}
+          }
         })();
       """);
       _startProgressTimer();
-      // Cek pengumuman baru setiap kali app dibuka kembali
       _checkAnnouncement();
     }
   }

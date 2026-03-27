@@ -2572,14 +2572,13 @@ document.addEventListener('visibilitychange', function() {
 
 function _isUserOnline(userData) {
     if (!userData) return false;
-    // Cek field online langsung
+    // Jika field online eksplisit false — offline
     if (userData.online === false) return false;
-    // Cek lastSeen dalam 3 menit terakhir
-    if (userData.lastSeen) {
-        const lastSeen = userData.lastSeen.seconds * 1000;
-        return (Date.now() - lastSeen) < 180000;
-    }
-    return false;
+    // Jika tidak ada lastSeen — offline
+    if (!userData.lastSeen) return false;
+    // lastSeen dalam 3 menit terakhir — online
+    const lastSeen = userData.lastSeen.seconds * 1000;
+    return (Date.now() - lastSeen) < 180000;
 }
 
 function onChatPhotoSelected(input) {
