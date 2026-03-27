@@ -212,6 +212,8 @@ function playMusic(videoId, encodedData) {
         }
     }
     _startBgKeepAlive();
+    // Preview video background — mute, loop 20 detik, tersembunyi
+    _startBgVideoPreview(videoId);
     // Kirim info ke native service untuk notifikasi saja (tidak intercept audio)
     if (window.flutter_inappwebview) {
         try {
@@ -260,38 +262,7 @@ function updatePlayPauseBtn(playing) {
 function expandPlayer() { document.getElementById('playerModal').style.display = 'flex'; }
 function minimizePlayer() { document.getElementById('playerModal').style.display = 'none'; }
 
-// ── CUPLIKAN VIDEO YT ────────────────────────────────────────────────────────
-let _videoPreviewPlayer = null;
-let _videoPreviewActive = false;
-
-function toggleVideoPreview() {
-    if (_videoPreviewActive) { closeVideoPreview(); return; }
-    if (!currentTrack) { showToast('Putar lagu dulu'); return; }
-    const overlay = document.getElementById('videoPreviewOverlay');
-    const btn = document.getElementById('btnVideoPreview');
-    if (!overlay) return;
-    overlay.style.display = 'block';
-    _videoPreviewActive = true;
-    if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" style="fill:white;width:14px;height:14px;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Video';
-    if (!_videoPreviewPlayer && typeof YT !== 'undefined' && YT.Player) {
-        _videoPreviewPlayer = new YT.Player('youtube-player-visible', {
-            videoId: currentTrack.videoId,
-            playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1 },
-            events: { onReady: (e) => e.target.playVideo() }
-        });
-    } else if (_videoPreviewPlayer && _videoPreviewPlayer.loadVideoById) {
-        _videoPreviewPlayer.loadVideoById(currentTrack.videoId);
-    }
-}
-
-function closeVideoPreview() {
-    const overlay = document.getElementById('videoPreviewOverlay');
-    const btn = document.getElementById('btnVideoPreview');
-    if (overlay) overlay.style.display = 'none';
-    _videoPreviewActive = false;
-    if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" style="fill:white;width:14px;height:14px;"><path d="M8 5v14l11-7z"/></svg> Video';
-    if (_videoPreviewPlayer && _videoPreviewPlayer.pauseVideo) {
-        try { _videoPreviewPlayer.pauseVideo(); } catch(e) {}
+ catch(e) {}
     }
 }
 
@@ -753,20 +724,9 @@ function playPrevDownloadedSong() {
 
 function renderVItem(t) {
     _cacheTrack(t);
-    var vid = t.videoId;
-    var img = getHighResImage(t.thumbnail || t.img || '');
-    return '<div class="v-item" onclick="playMusicById(\'' + vid + '\')" '
-        + 'onmouseenter="_inlinePreviewStart(\'' + vid + '\',this)" '
-        + 'onmouseleave="_inlinePreviewStop(this)" '
-        + 'ontouchstart="_inlinePreviewTouch(\'' + vid + '\',this,event)" '
-        + 'ontouchend="_inlinePreviewStopTouch(this)" '
-        + 'ontouchmove="_inlinePreviewStopTouch(this)">'
-        + '<div class="v-img-wrap">'
-        + '<img loading="lazy" class="v-img" src="' + img + '">'
-        + '<div class="v-preview-frame" id="pf-' + vid + '"></div>'
-        + '</div>'
-        + '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div>'
-        + '<div class="v-sub">' + (t.artist || '') + '</div></div></div>';
+    return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
+        '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '">' +
+        '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
 }
 function renderDownloadedVItem(t) {
     _cacheTrack(t);
@@ -820,19 +780,9 @@ function _refreshDownloadedIcons(nowPlaying) {
 }
 function renderHCard(t) {
     _cacheTrack(t);
-    var vid = t.videoId;
-    var img = getHighResImage(t.thumbnail || t.img || '');
-    return '<div class="h-card" onclick="playMusicById(\'' + vid + '\')" '
-        + 'onmouseenter="_inlinePreviewStart(\'' + vid + '\',this)" '
-        + 'onmouseleave="_inlinePreviewStop(this)" '
-        + 'ontouchstart="_inlinePreviewTouch(\'' + vid + '\',this,event)" '
-        + 'ontouchend="_inlinePreviewStopTouch(this)" '
-        + 'ontouchmove="_inlinePreviewStopTouch(this)">'
-        + '<div class="h-img-wrap">'
-        + '<img loading="lazy" class="h-img" src="' + img + '">'
-        + '<div class="v-preview-frame" id="pf-' + vid + '"></div>'
-        + '</div>'
-        + '<div class="h-title">' + (t.title || '') + '</div></div>';
+    return '<div class="h-card" onclick="playMusicById(\'' + t.videoId + '\')">' +
+        '<img loading="lazy" class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '">' +
+        '<div class="h-title">' + (t.title || '') + '</div></div>';
 }
 function renderArtistCard(name) {
     return '<div class="artist-card" onclick="openArtist(\'' + encodeURIComponent(name) + '\')">' +
@@ -2715,77 +2665,59 @@ async function saveUsername(username) {
     } catch(e) { showToast('Gagal simpan username: ' + e.message); }
 }
 
-// ── INLINE PREVIEW — video langsung di thumbnail, mute, loop 20 detik ────────
-var _inlinePreviewMap = {};   // vid -> { player, timer, loopTimer, el }
-var _inlineTouchTimer = null;
-var _inlineTouchVid   = null;
 
-function _inlinePreviewStart(vid, cardEl) {
-    if (_inlinePreviewMap[vid]) return; // sudah aktif
-    var frame = cardEl.querySelector('.v-preview-frame');
-    if (!frame) return;
-    if (typeof YT === 'undefined' || !YT.Player) return;
+    // Jangan stop saat touch end — biarkan preview jalan sampai user pindah
+}
 
-    // Buat iframe YT di dalam frame
-    var div = document.createElement('div');
-    frame.appendChild(div);
+// ── BACKGROUND VIDEO PREVIEW — jalan otomatis saat lagu diputar, mute, tersembunyi ──
+var _bgPreviewPlayer = null;
+var _bgPreviewLoopTimer = null;
 
-    var p = new YT.Player(div, {
-        videoId: vid,
-        playerVars: {
-            autoplay: 1, mute: 1, playsinline: 1,
-            controls: 0, rel: 0, modestbranding: 1,
-            start: 30, disablekb: 1, iv_load_policy: 3, fs: 0
-        },
-        events: {
-            onReady: function(e) {
-                e.target.mute();
-                e.target.playVideo();
-                frame.style.opacity = '1';
-                var img = cardEl.querySelector('img');
-                if (img) img.style.opacity = '0';
-                // Loop setiap 20 detik
-                var lt = setInterval(function() {
-                    try { e.target.seekTo(30); e.target.playVideo(); } catch(x) {}
-                }, 20000);
-                _inlinePreviewMap[vid].loopTimer = lt;
+function _startBgVideoPreview(videoId) {
+    // Buat container tersembunyi jika belum ada
+    var container = document.getElementById('bgVideoPreviewContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'bgVideoPreviewContainer';
+        container.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;';
+        var inner = document.createElement('div');
+        inner.id = 'bgVideoPreviewInner';
+        container.appendChild(inner);
+        document.body.appendChild(container);
+    }
+    // Stop loop timer lama
+    if (_bgPreviewLoopTimer) { clearInterval(_bgPreviewLoopTimer); _bgPreviewLoopTimer = null; }
+    // Buat atau reload player
+    if (_bgPreviewPlayer && _bgPreviewPlayer.loadVideoById) {
+        try {
+            _bgPreviewPlayer.loadVideoById({ videoId: videoId, startSeconds: 30 });
+            _bgPreviewPlayer.mute();
+        } catch(e) { _bgPreviewPlayer = null; }
+    }
+    if (!_bgPreviewPlayer && typeof YT !== 'undefined' && YT.Player) {
+        _bgPreviewPlayer = new YT.Player('bgVideoPreviewInner', {
+            videoId: videoId,
+            playerVars: {
+                autoplay: 1, mute: 1, playsinline: 1,
+                controls: 0, rel: 0, modestbranding: 1,
+                start: 30, disablekb: 1, iv_load_policy: 3, fs: 0
             },
-            onStateChange: function(e) {
-                if (e.data === YT.PlayerState.ENDED) {
-                    try { e.target.seekTo(30); e.target.playVideo(); } catch(x) {}
+            events: {
+                onReady: function(e) {
+                    e.target.mute();
+                    e.target.playVideo();
+                    // Loop setiap 20 detik
+                    _bgPreviewLoopTimer = setInterval(function() {
+                        try { e.target.seekTo(30); e.target.playVideo(); } catch(x) {}
+                    }, 20000);
+                },
+                onStateChange: function(e) {
+                    if (e.data === YT.PlayerState.ENDED) {
+                        try { e.target.seekTo(30); e.target.playVideo(); } catch(x) {}
+                    }
                 }
             }
-        }
-    });
-    _inlinePreviewMap[vid] = { player: p, loopTimer: null, el: cardEl };
-}
-
-function _inlinePreviewStop(cardEl) {
-    var frame = cardEl.querySelector('.v-preview-frame');
-    var img   = cardEl.querySelector('img');
-    // Cari vid dari map
-    var vid = null;
-    for (var k in _inlinePreviewMap) {
-        if (_inlinePreviewMap[k].el === cardEl) { vid = k; break; }
+        });
     }
-    if (!vid) return;
-    var entry = _inlinePreviewMap[vid];
-    if (entry.loopTimer) clearInterval(entry.loopTimer);
-    try { entry.player.destroy(); } catch(e) {}
-    delete _inlinePreviewMap[vid];
-    if (frame) { frame.innerHTML = ''; frame.style.opacity = '0'; }
-    if (img)   img.style.opacity = '1';
-}
-
-// Mobile: long press 600ms untuk preview, release untuk stop
-function _inlinePreviewTouch(vid, cardEl, e) {
-    _inlineTouchVid = vid;
-    _inlineTouchTimer = setTimeout(function() {
-        _inlinePreviewStart(vid, cardEl);
-    }, 600);
-}
-function _inlinePreviewStopTouch(cardEl) {
-    if (_inlineTouchTimer) { clearTimeout(_inlineTouchTimer); _inlineTouchTimer = null; }
-    // Jangan stop saat touch end — biarkan preview jalan sampai user pindah
 }
 
