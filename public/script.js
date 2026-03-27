@@ -273,7 +273,6 @@ function toggleVideoPreview() {
     overlay.style.display = 'block';
     _videoPreviewActive = true;
     if (btn) btn.innerHTML = '<svg viewBox="0 0 24 24" style="fill:white;width:14px;height:14px;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Video';
-    // Buat YT player baru di overlay
     if (!_videoPreviewPlayer && typeof YT !== 'undefined' && YT.Player) {
         _videoPreviewPlayer = new YT.Player('youtube-player-visible', {
             videoId: currentTrack.videoId,
@@ -294,6 +293,75 @@ function closeVideoPreview() {
     if (_videoPreviewPlayer && _videoPreviewPlayer.pauseVideo) {
         try { _videoPreviewPlayer.pauseVideo(); } catch(e) {}
     }
+}
+
+// ── TRACK PREVIEW (dari beranda/pencarian) ────────────────────────────────────
+let _trackPreviewPlayer = null;
+let _previewTouchTimer = null;
+let _previewCurrentVid = null;
+
+function openTrackPreview(videoId) {
+    _previewCurrentVid = videoId;
+    // Buat atau tampilkan modal preview
+    let modal = document.getElementById('trackPreviewModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'trackPreviewModal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(8px);';
+        modal.innerHTML =
+            '<div style="width:100%;max-width:360px;padding:0 16px;">' +
+            '<div style="position:relative;width:100%;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 24px 64px rgba(0,0,0,0.8);">' +
+            '<div id="trackPreviewIframe" style="width:100%;height:100%;"></div>' +
+            '<div style="position:absolute;top:0;left:0;right:0;height:40px;background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent);display:flex;align-items:center;padding:0 12px;">' +
+            '<span style="color:rgba(255,255,255,0.7);font-size:11px;font-weight:600;letter-spacing:1px;">PREVIEW VIDEO</span>' +
+            '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:10px;margin-top:16px;">' +
+            '<button onclick="closeTrackPreview()" style="flex:1;padding:13px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:white;font-size:14px;font-weight:600;cursor:pointer;">Tutup</button>' +
+            '<button onclick="closeTrackPreview();playMusicById(\'' + videoId + '\')" style="flex:2;padding:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;color:white;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(167,139,250,0.4);">▶ Putar Lagu</button>' +
+            '</div>' +
+            '</div>';
+        modal.addEventListener('click', function(e) { if (e.target === modal) closeTrackPreview(); });
+        document.body.appendChild(modal);
+    } else {
+        modal.style.display = 'flex';
+        // Update tombol putar dengan videoId baru
+        const playBtn = modal.querySelector('button:last-child');
+        if (playBtn) playBtn.onclick = function() { closeTrackPreview(); playMusicById(videoId); };
+    }
+
+    // Buat YT player di dalam modal
+    if (_trackPreviewPlayer && _trackPreviewPlayer.loadVideoById) {
+        try { _trackPreviewPlayer.loadVideoById(videoId); } catch(e) { _trackPreviewPlayer = null; }
+    }
+    if (!_trackPreviewPlayer && typeof YT !== 'undefined' && YT.Player) {
+        _trackPreviewPlayer = new YT.Player('trackPreviewIframe', {
+            videoId: videoId,
+            playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, controls: 1 },
+            events: { onReady: (e) => e.target.playVideo() }
+        });
+    }
+}
+
+function closeTrackPreview() {
+    const modal = document.getElementById('trackPreviewModal');
+    if (modal) modal.style.display = 'none';
+    if (_trackPreviewPlayer) {
+        try { _trackPreviewPlayer.pauseVideo(); } catch(e) {}
+    }
+    _previewCurrentVid = null;
+}
+
+// Long press untuk mobile
+function _previewTouchStart(videoId, e) {
+    _previewTouchEnd();
+    _previewTouchTimer = setTimeout(function() {
+        e.preventDefault();
+        openTrackPreview(videoId);
+    }, 600);
+}
+function _previewTouchEnd() {
+    if (_previewTouchTimer) { clearTimeout(_previewTouchTimer); _previewTouchTimer = null; }
 }
 
 function startProgressBar() {
@@ -636,8 +704,13 @@ function playPrevDownloadedSong() {
 
 function renderVItem(t) {
     _cacheTrack(t);
-    return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
-        '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '">' +
+    var vid = t.videoId;
+    var img = getHighResImage(t.thumbnail || t.img || '');
+    return '<div class="v-item" onclick="playMusicById(\'' + vid + '\')" ontouchstart="_previewTouchStart(\'' + vid + '\',event)" ontouchend="_previewTouchEnd()" ontouchmove="_previewTouchEnd()">' +
+        '<div style="position:relative;flex-shrink:0;">' +
+        '<img loading="lazy" class="v-img" src="' + img + '">' +
+        '<div class="preview-btn" onclick="event.stopPropagation();openTrackPreview(\'' + vid + '\')"><svg viewBox="0 0 24 24" style="fill:white;width:10px;height:10px;"><path d="M8 5v14l11-7z"/></svg></div>' +
+        '</div>' +
         '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
 }
 function renderDownloadedVItem(t) {
@@ -692,8 +765,13 @@ function _refreshDownloadedIcons(nowPlaying) {
 }
 function renderHCard(t) {
     _cacheTrack(t);
-    return '<div class="h-card" onclick="playMusicById(\'' + t.videoId + '\')">' +
-        '<img loading="lazy" class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '">' +
+    var vid = t.videoId;
+    var img = getHighResImage(t.thumbnail || t.img || '');
+    return '<div class="h-card" onclick="playMusicById(\'' + vid + '\')" ontouchstart="_previewTouchStart(\'' + vid + '\',event)" ontouchend="_previewTouchEnd()" ontouchmove="_previewTouchEnd()">' +
+        '<div style="position:relative;">' +
+        '<img loading="lazy" class="h-img" src="' + img + '">' +
+        '<div class="preview-btn" onclick="event.stopPropagation();openTrackPreview(\'' + vid + '\')"><svg viewBox="0 0 24 24" style="fill:white;width:10px;height:10px;"><path d="M8 5v14l11-7z"/></svg></div>' +
+        '</div>' +
         '<div class="h-title">' + (t.title || '') + '</div></div>';
 }
 function renderArtistCard(name) {
