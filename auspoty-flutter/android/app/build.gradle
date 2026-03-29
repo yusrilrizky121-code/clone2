@@ -27,9 +27,9 @@ android {
 
     defaultConfig {
         applicationId "com.auspoty.app"
-        minSdkVersion 24
+        minSdkVersion 21
         targetSdk 34
-        versionCode 21
+        versionCode 22
         versionName "9.4.1"
         multiDexEnabled true
     }
@@ -42,6 +42,12 @@ android {
                 storeFile file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
             }
+            v1SigningEnabled true
+            v2SigningEnabled true
+            v3SigningEnabled true
+        }
+        debug {
+            // Debug signing juga pakai V2 agar kompatibel Android 14
             v1SigningEnabled true
             v2SigningEnabled true
         }
