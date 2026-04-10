@@ -1,4 +1,4 @@
-// PWA
+// PWA + Performance (60fps target)
 let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
@@ -7,6 +7,118 @@ window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); deferredPrompt = e;
     const btn = document.getElementById('installAppBtn');
     if (btn) { btn.style.display = 'flex'; btn.addEventListener('click', async () => { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') btn.style.display = 'none'; deferredPrompt = null; }); }
+});
+
+// === VIRTUAL SCROLLING (60fps lists) ===
+const VIRTUAL_THRESHOLD = 100;
+const VISIBLE_BUFFER = 5;
+class VirtualList {
+    constructor(container, renderItem, itemHeight = 80) {
+        this.container = container;
+        this.renderItem = renderItem;
+        this.itemHeight = itemHeight;
+        this.items = [];
+        this.startIdx = 0;
+        this.endIdx = 0;
+        this.observer = null;
+        this.init();
+    }
+    init() {
+        this.resizeObserver = new ResizeObserver(() => this.update());
+        this.resizeObserver.observe(this.container);
+        this.observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && entry.target.classList.contains('sentinel-bottom')) {
+                    this.loadMore();
+                }
+            });
+        }, { threshold: 0 });
+    }
+    setData(items) {
+        this.items = items;
+        this.update();
+    }
+    update() {
+        const scrollTop = this.container.scrollTop;
+        const viewportHeight = this.container.clientHeight;
+        this.startIdx = Math.max(0, Math.floor(scrollTop / this.itemHeight) - VISIBLE_BUFFER);
+        this.endIdx = Math.min(this.items.length, this.startIdx + Math.ceil((viewportHeight + 2 * VIRTUAL_THRESHOLD) / this.itemHeight) + VISIBLE_BUFFER);
+        this.render();
+        const sentinel = this.container.querySelector('.sentinel-bottom');
+        if (sentinel) this.observer.observe(sentinel);
+    }
+    render() {
+        let html = '';
+        for (let i = this.startIdx; i < this.endIdx && i < this.items.length; i++) {
+            html += this.renderItem(this.items[i], i);
+        }
+        this.container.innerHTML = `
+            <div style="height:${this.startIdx * this.itemHeight}px;"></div>
+            ${html}
+            <div style="height:${Math.max(0, (this.items.length - this.endIdx) * this.itemHeight)}px;"></div>
+            <div class="sentinel-bottom" style="height:1px;"></div>
+        `;
+    }
+    loadMore() { /* pagination */ }
+}
+
+// === SMOOTH SEARCH (debounced + RAF) ===
+let searchRaf = null;
+function doSmoothSearch(query) {
+    if (searchRaf) cancelAnimationFrame(searchRaf);
+    searchRaf = requestAnimationFrame(async () => {
+        // Show skeleton while loading
+        const results = document.getElementById('searchResults');
+        if (results) {
+            results.innerHTML = Array(8).fill().map(() => 
+                '<div class="v-item skeleton-shim"><div class="v-img shimmer"></div><div class="v-info"><div class="v-title shimmer"></div><div class="v-sub shimmer"></div></div></div>'
+            ).join('');
+        }
+        // Actual search
+        await doSearch(query);
+    });
+}
+
+// === GESTURE HANDLERS ===
+let startY = 0, isPulling = false;
+function initPullToRefresh(container) {
+    container.addEventListener('touchstart', e => {
+        startY = e.touches[0].clientY;
+        isPulling = true;
+    }, { passive: true });
+    container.addEventListener('touchmove', e => {
+        if (!isPulling) return;
+        const currentY = e.touches[0].clientY;
+        const diff = currentY - startY;
+        if (diff > 60 && container.scrollTop === 0) {
+            // Show pull indicator
+            container.style.transform = `translateY(${Math.min(diff/3, 60)}px)`;
+        }
+    }, { passive: true });
+    container.addEventListener('touchend', () => {
+        if (isPulling) {
+            container.style.transform = 'translateY(0)';
+            // Trigger refresh
+            if (window.currentView === 'home') loadHomeData();
+        }
+        isPulling = false;
+    }, { passive: true });
+}
+
+// Init on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    // Virtual lists
+    const searchList = document.querySelector('#searchResults');
+    if (searchList) new VirtualList(searchList.parentElement, renderVItem);
+    
+    // Pull to refresh
+    const homeContainer = document.getElementById('view-home');
+    if (homeContainer) initPullToRefresh(homeContainer);
+    
+    // Smooth transitions
+    document.querySelectorAll('.view-section').forEach(view => {
+        view.addEventListener('transitionend', () => view.classList.remove('fade-in'));
+    });
 });
 
 // INDEXEDDB

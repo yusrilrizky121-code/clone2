@@ -5,125 +5,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Auspoty</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #0d0d18;
-      color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      flex-direction: column;
-      gap: 20px;
-      padding: 24px;
-    }
-    .logo { font-size: 28px; font-weight: 800; color: #a78bfa; }
-    .subtitle { color: rgba(255,255,255,0.5); font-size: 14px; text-align: center; }
-    .btn-google {
-      display: flex; align-items: center; gap: 12px;
-      background: #fff; color: #333; border: none;
-      border-radius: 12px; padding: 14px 28px;
-      font-size: 15px; font-weight: 600; cursor: pointer;
-      width: 100%; max-width: 300px; justify-content: center;
-    }
-    .status { color: rgba(255,255,255,0.5); font-size: 13px; text-align: center; }
-    .spinner {
-      width: 28px; height: 28px;
-      border: 3px solid rgba(167,139,250,0.3);
-      border-top-color: #a78bfa;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      display: none;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { background: #0a0a12; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 20px; padding: 24px; }
+    .logo-wrap { text-align: center; }
+    .logo-icon { width: 72px; height: 72px; border-radius: 20px; background: linear-gradient(135deg,#7c3aed,#db2777); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
+    .logo-icon svg { fill: white; width: 36px; height: 36px; }
+    h1 { font-size: 28px; font-weight: 800; color: #7c3aed; }
+    p { color: rgba(255,255,255,0.5); font-size: 13px; margin-top: 4px; }
+    .btn-google { display: flex; align-items: center; gap: 12px; background: #fff; color: #1a1a1a; border: none; border-radius: 14px; padding: 14px 28px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; max-width: 320px; justify-content: center; }
+    .spinner { width: 28px; height: 28px; border: 3px solid rgba(124,58,237,0.3); border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    /* Hide Vercel toolbar */
+    .status { color: rgba(255,255,255,0.5); font-size: 13px; text-align: center; }
     vercel-live-feedback,vercel-toolbar,#__vercel-toolbar,[data-vercel-toolbar]{display:none!important;}
   </style>
 </head>
 <body>
-  <div class="logo">Auspoty</div>
-  <div class="subtitle">Masuk dengan akun Google kamu</div>
+  <div class="logo-wrap">
+    <div class="logo-icon"><svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>
+    <h1>Auspoty</h1>
+    <p>Music & Lyrics</p>
+  </div>
   <button class="btn-google" id="btnLogin" onclick="doLogin()">
-    <svg viewBox="0 0 48 48" style="width:20px;height:20px;">
-      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-    </svg>
+    <svg viewBox="0 0 48 48" style="width:20px;height:20px;"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
     Masuk dengan Google
   </button>
   <div class="spinner" id="spinner"></div>
   <div class="status" id="status"></div>
-
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider }
-      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyAYJEVXTS17vEX4J6_ymevMiJUnWV-Xf8Q",
-      authDomain: "auspoty-web.firebaseapp.com",
-      projectId: "auspoty-web",
-      storageBucket: "auspoty-web.firebasestorage.app",
-      messagingSenderId: "355662875368",
-      appId: "1:355662875368:web:2057b213f4b7794aae175d"
-    };
-
-    const app = initializeApp(firebaseConfig);
+    import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    const app = initializeApp({ apiKey:"AIzaSyAYJEVXTS17vEX4J6_ymevMiJUnWV-Xf8Q", authDomain:"auspoty-web.firebaseapp.com", projectId:"auspoty-web", storageBucket:"auspoty-web.firebasestorage.app", messagingSenderId:"355662875368", appId:"1:355662875368:web:2057b213f4b7794aae175d" });
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
-    provider.addScope('email');
-    provider.addScope('profile');
-
+    provider.addScope('email'); provider.addScope('profile');
     const statusEl = document.getElementById('status');
-    const spinner  = document.getElementById('spinner');
-    const btn      = document.getElementById('btnLogin');
-
+    const spinner = document.getElementById('spinner');
+    const btn = document.getElementById('btnLogin');
     function redirectWithUser(user) {
-      const userData = {
-        name: user.displayName || 'Pengguna Google',
-        email: user.email || '',
-        picture: user.photoURL || '',
-        sub: user.uid || '',
-      };
-      const encoded = encodeURIComponent(JSON.stringify(userData));
-      // Kembali ke halaman utama — Dart onLoadStop akan inject userData
-      window.location.replace('/?userData=' + encoded);
+      const ud = { name: user.displayName||'Pengguna Google', email: user.email||'', picture: user.photoURL||'', sub: user.uid||'' };
+      window.location.replace('/?userData=' + encodeURIComponent(JSON.stringify(ud)));
     }
-
-    // Cek apakah ada redirect result (setelah signInWithRedirect selesai)
-    spinner.style.display = 'block';
-    btn.style.display = 'none';
-    statusEl.textContent = 'Memeriksa sesi...';
-
-    getRedirectResult(auth).then((result) => {
-      if (result && result.user) {
-        statusEl.textContent = 'Login berhasil! Kembali ke app...';
-        redirectWithUser(result.user);
-      } else {
-        spinner.style.display = 'none';
-        btn.style.display = 'flex';
-        statusEl.textContent = '';
-      }
-    }).catch((e) => {
-      spinner.style.display = 'none';
-      btn.style.display = 'flex';
-      statusEl.textContent = 'Coba lagi';
-    });
-
+    spinner.style.display = 'block'; btn.style.display = 'none'; statusEl.textContent = 'Memeriksa sesi...';
+    getRedirectResult(auth).then(r => {
+      if (r && r.user) { statusEl.textContent = 'Login berhasil!'; redirectWithUser(r.user); }
+      else { spinner.style.display = 'none'; btn.style.display = 'flex'; statusEl.textContent = ''; }
+    }).catch(() => { spinner.style.display = 'none'; btn.style.display = 'flex'; statusEl.textContent = ''; });
     window.doLogin = async function() {
-      btn.style.display = 'none';
-      spinner.style.display = 'block';
-      statusEl.textContent = 'Membuka akun Google...';
-      try {
-        // signInWithRedirect bekerja di WebView Android
-        await signInWithRedirect(auth, provider);
-      } catch(e) {
-        spinner.style.display = 'none';
-        btn.style.display = 'flex';
-        statusEl.textContent = 'Gagal: ' + (e.message || e.code || 'Coba lagi');
-      }
+      btn.style.display = 'none'; spinner.style.display = 'block'; statusEl.textContent = 'Membuka akun Google...';
+      try { await signInWithRedirect(auth, provider); }
+      catch(e) { spinner.style.display = 'none'; btn.style.display = 'flex'; statusEl.textContent = 'Gagal: ' + (e.message||e.code||'Coba lagi'); }
     };
   </script>
 </body>

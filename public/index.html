@@ -173,64 +173,38 @@
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════════════
-     LAYAR LOGIN / REGISTER — ringan, tanpa backdrop-filter
-     ══════════════════════════════════════════════════════════ -->
-<div id="authScreen" style="display:none;position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#0d0d18;">
+<!-- AUTH SCREEN -->
+<div id="authScreen" style="display:none;position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#0a0a12;">
   <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px;">
-    <!-- Logo -->
-    <div style="text-align:center;margin-bottom:32px;">
-      <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#a78bfa,#f472b6);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
-        <svg viewBox="0 0 24 24" style="fill:white;width:36px;height:36px;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+    <div style="text-align:center;margin-bottom:36px;">
+      <div style="width:76px;height:76px;border-radius:22px;background:linear-gradient(135deg,#7c3aed,#db2777);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 12px 40px rgba(124,58,237,0.4);">
+        <svg viewBox="0 0 24 24" style="fill:white;width:38px;height:38px;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
       </div>
-      <h1 style="font-size:28px;font-weight:800;color:white;margin:0 0 4px;">Auspoty</h1>
+      <h1 style="font-size:30px;font-weight:900;color:white;margin:0 0 6px;letter-spacing:-0.5px;">Auspoty</h1>
       <p style="color:rgba(255,255,255,0.4);font-size:13px;margin:0;">Music &amp; Lyrics</p>
     </div>
-
-    <!-- Card — solid bg, no blur -->
-    <div style="width:100%;max-width:380px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:24px 20px;">
-      <!-- Tab -->
-      <div style="display:flex;background:rgba(255,255,255,0.06);border-radius:12px;padding:3px;margin-bottom:24px;">
-        <button id="tabLogin" onclick="authSwitchTab('login')" style="flex:1;padding:10px;border:none;border-radius:10px;background:linear-gradient(135deg,#a78bfa,#f472b6);color:white;font-weight:700;font-size:14px;cursor:pointer;">Masuk</button>
-        <button id="tabRegister" onclick="authSwitchTab('register')" style="flex:1;padding:10px;border:none;border-radius:10px;background:transparent;color:rgba(255,255,255,0.5);font-weight:600;font-size:14px;cursor:pointer;">Daftar</button>
+    <div style="width:100%;max-width:380px;background:#12121e;border:1px solid rgba(255,255,255,0.08);border-radius:22px;padding:24px 20px;">
+      <div style="display:flex;background:rgba(255,255,255,0.05);border-radius:12px;padding:3px;margin-bottom:24px;gap:3px;">
+        <button id="tabLogin" onclick="authSwitchTab('login')" style="flex:1;padding:10px;border:none;border-radius:10px;background:linear-gradient(135deg,#7c3aed,#db2777);color:white;font-weight:700;font-size:14px;cursor:pointer;">Masuk</button>
+        <button id="tabRegister" onclick="authSwitchTab('register')" style="flex:1;padding:10px;border:none;border-radius:10px;background:transparent;color:rgba(255,255,255,0.45);font-weight:600;font-size:14px;cursor:pointer;">Daftar</button>
       </div>
-
-      <!-- Form Login -->
       <div id="formLogin">
-        <div style="margin-bottom:12px;">
-          <input id="loginEmail" type="email" autocomplete="email" placeholder="Email" style="width:100%;padding:13px 14px;background:#252540;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:15px;outline:none;box-sizing:border-box;">
-        </div>
-        <div style="margin-bottom:20px;">
-          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" style="width:100%;padding:13px 14px;background:#252540;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:15px;outline:none;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
-        </div>
-        <button onclick="doLogin()" id="btnLogin" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#f472b6);border:none;border-radius:12px;color:white;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;">Masuk</button>
+        <input id="loginEmail" type="email" autocomplete="email" placeholder="Email" style="width:100%;padding:13px 14px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-size:15px;outline:none;box-sizing:border-box;margin-bottom:12px;">
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" style="width:100%;padding:13px 14px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-size:15px;outline:none;box-sizing:border-box;margin-bottom:20px;" onkeydown="if(event.key==='Enter')doLogin()">
+        <button onclick="doLogin()" id="btnLogin" style="width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#db2777);border:none;border-radius:12px;color:white;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;">Masuk</button>
       </div>
-
-      <!-- Form Register -->
       <div id="formRegister" style="display:none;">
-        <div style="margin-bottom:12px;">
-          <input id="regName" type="text" autocomplete="name" placeholder="Nama lengkap" style="width:100%;padding:13px 14px;background:#252540;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:15px;outline:none;box-sizing:border-box;">
-        </div>
-        <div style="margin-bottom:12px;">
-          <input id="regEmail" type="email" autocomplete="email" placeholder="Email" style="width:100%;padding:13px 14px;background:#252540;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:15px;outline:none;box-sizing:border-box;">
-        </div>
-        <div style="margin-bottom:20px;">
-          <input id="regPassword" type="password" autocomplete="new-password" placeholder="Password (min. 6 karakter)" style="width:100%;padding:13px 14px;background:#252540;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:15px;outline:none;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doRegister()">
-        </div>
-        <button onclick="doRegister()" id="btnRegister" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#f472b6);border:none;border-radius:12px;color:white;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;">Buat Akun</button>
+        <input id="regName" type="text" autocomplete="name" placeholder="Nama lengkap" style="width:100%;padding:13px 14px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-size:15px;outline:none;box-sizing:border-box;margin-bottom:12px;">
+        <input id="regEmail" type="email" autocomplete="email" placeholder="Email" style="width:100%;padding:13px 14px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-size:15px;outline:none;box-sizing:border-box;margin-bottom:12px;">
+        <input id="regPassword" type="password" autocomplete="new-password" placeholder="Password (min. 6 karakter)" style="width:100%;padding:13px 14px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;font-size:15px;outline:none;box-sizing:border-box;margin-bottom:20px;" onkeydown="if(event.key==='Enter')doRegister()">
+        <button onclick="doRegister()" id="btnRegister" style="width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#db2777);border:none;border-radius:12px;color:white;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;">Buat Akun</button>
       </div>
-
-      <!-- Error -->
-      <div id="authError" style="display:none;background:rgba(255,82,82,0.15);border:1px solid rgba(255,82,82,0.3);border-radius:8px;padding:10px 14px;color:#ff6b6b;font-size:13px;text-align:center;margin-bottom:12px;"></div>
-
-      <!-- Divider -->
+      <div id="authError" style="display:none;background:rgba(255,82,82,0.12);border:1px solid rgba(255,82,82,0.25);border-radius:10px;padding:10px 14px;color:#ff6b6b;font-size:13px;text-align:center;margin-bottom:12px;"></div>
       <div style="display:flex;align-items:center;gap:10px;margin:4px 0 14px;">
-        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
         <span style="color:rgba(255,255,255,0.3);font-size:12px;">atau</span>
-        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
       </div>
-
-      <!-- Google -->
       <button onclick="doGoogleAuth()" style="width:100%;padding:13px;background:white;border:none;border-radius:12px;color:#1a1a1a;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;">
         <svg viewBox="0 0 48 48" style="width:18px;height:18px;"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
         Lanjutkan dengan Google

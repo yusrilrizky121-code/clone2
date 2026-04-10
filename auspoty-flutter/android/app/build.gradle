@@ -28,9 +28,9 @@ android {
     defaultConfig {
         applicationId "com.auspoty.app"
         minSdkVersion 21
-        targetSdk 34
-        versionCode 23
-        versionName "9.4.1"
+        targetSdkVersion 34
+        versionCode 25
+        versionName "9.5.0"
         multiDexEnabled true
     }
 
@@ -69,16 +69,6 @@ android {
         }
     }
 
-    // Hanya build arm64 untuk ukuran minimal
-    splits {
-        abi {
-            enable true
-            reset()
-            include "arm64-v8a"
-            universalApk false
-        }
-    }
-
     lint {
         checkReleaseBuilds false
         abortOnError false
@@ -88,7 +78,7 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             if (variant.buildType.name == 'release') {
-                outputFileName = "auspoty-arm64-v8a-release.apk"
+                outputFileName = "auspoty-release.apk"
             }
         }
     }
