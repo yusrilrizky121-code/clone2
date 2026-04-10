@@ -29,7 +29,7 @@ android {
         applicationId "com.auspoty.app"
         minSdkVersion 21
         targetSdk 34
-        versionCode 22
+        versionCode 23
         versionName "9.4.1"
         multiDexEnabled true
     }
@@ -47,7 +47,6 @@ android {
             v3SigningEnabled true
         }
         debug {
-            // Debug signing juga pakai V2 agar kompatibel Android 14
             v1SigningEnabled true
             v2SigningEnabled true
         }
@@ -67,6 +66,16 @@ android {
         debug {
             minifyEnabled false
             shrinkResources false
+        }
+    }
+
+    // Hanya build arm64 untuk ukuran minimal
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a"
+            universalApk false
         }
     }
 
