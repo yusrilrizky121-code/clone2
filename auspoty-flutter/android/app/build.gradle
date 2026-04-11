@@ -27,7 +27,7 @@ android {
 
     defaultConfig {
         applicationId "com.auspoty.app"
-        minSdkVersion 21
+        minSdkVersion flutter.minSdkVersion
         targetSdkVersion 35
         versionCode 27
         versionName "9.6.1"

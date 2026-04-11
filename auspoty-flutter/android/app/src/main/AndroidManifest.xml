@@ -23,6 +23,7 @@
         android:usesCleartextTraffic="false"
         android:allowAudioPlaybackCapture="true"
         android:hardwareAccelerated="true"
+        android:extractNativeLibs="true"
         android:networkSecurityConfig="@xml/network_security_config">
 
         <meta-data
